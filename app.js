@@ -40,7 +40,7 @@ function makeVoxelGeometry(size){
   const amount=enabled?Math.max(0,Math.min(.45,+($('#rounding')?.value||0))):0;
   if(amount<=.001)return new THREE.BoxGeometry(size,size,size);
   const radius=Math.min(.49,amount);
-  const geo=new RoundedBoxGeometry(1,1,1,4,radius);
+  const geo=new RoundedBoxGeometry(1,1,1,2,radius);
   geo.scale(size,size,size);
   geo.computeVertexNormals();
   return geo;
