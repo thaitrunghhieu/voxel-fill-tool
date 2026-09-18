@@ -17,7 +17,7 @@ const controls=new OrbitControls(camera,canvas); controls.enableDamping=true;
 controls.mouseButtons.LEFT=null; controls.mouseButtons.MIDDLE=THREE.MOUSE.PAN; controls.mouseButtons.RIGHT=THREE.MOUSE.PAN;
 scene.add(new THREE.HemisphereLight(0xffffff,0x333333,2)); const dl=new THREE.DirectionalLight(0xffffff,3);dl.position.set(6,10,8);scene.add(dl);
 const grid=new THREE.GridHelper(30,30,0x555555,0x292929);scene.add(grid);
-let modelRoot=null, voxelMesh=null, meshes=[], sourceName='model', voxelPositions=[], voxelColors=[], sliceEnabled=false, xrayEnabled=false;
+let modelRoot=null, voxelMesh=null, meshes=[], sourceName='model', voxelPositions=[], voxelColors=[], voxelShadows=[], sliceEnabled=false, xrayEnabled=false;
 let exportDirectoryHandle=null;
 const PALETTE={
  Blue:{color:'#45C9FF',shadow:'#2B3E89'}, Brown:{color:'#875530',shadow:'#89542B'},
@@ -62,6 +62,12 @@ function makeBevelNormalMap(){
   return tex;
 }
 const bevelNormalMap=makeBevelNormalMap();
+function drawNormalPreview(){
+  const c=$('#normalPreview');if(!c)return;
+  const ctx=c.getContext('2d'),img=ctx.createImageData(64,64),src=bevelNormalMap.image.data;
+  img.data.set(src);ctx.putImageData(img,0,0);
+}
+queueMicrotask(drawNormalPreview);
 function makeVoxelGeometry(size){
   const enabled=$('#roundingEnabled')?.checked!==false;
   const amount=enabled?Math.max(0,Math.min(.45,+($('#rounding')?.value||0))):0;
@@ -78,7 +84,7 @@ function makeVoxelGeometry(size){
   return geo;
 }
 async function voxelize(){if(!modelRoot)return;$('#voxelize').disabled=true;$('#export').disabled=true;$('#status').textContent='Calculating voxels…';await new Promise(r=>setTimeout(r,30));modelRoot.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(modelRoot),step=+$('#voxel').value,scale=+$('#cubeScale').value,mode=$('#mode').value;const size=box.getSize(new THREE.Vector3()), nx=Math.ceil(size.x/step),ny=Math.ceil(size.y/step),nz=Math.ceil(size.z/step),total=nx*ny*nz;if(total>1200000){$('#status').textContent=`Grid too dense (${total.toLocaleString()} cells). Increase voxel size.`;$('#voxelize').disabled=false;return}const positions=[];let n=0;for(let ix=0;ix<nx;ix++){const x=box.min.x+(ix+.5)*step;for(let iy=0;iy<ny;iy++){const y=box.min.y+(iy+.5)*step;for(let iz=0;iz<nz;iz++){const z=box.min.z+(iz+.5)*step,p=new THREE.Vector3(x,y,z);if(mode==='solid'?pointInside(p):nearSurface(p,step*.7))positions.push(p);n++}if(iy%5===0){$('#status').textContent=`Calculating… ${Math.round(n/total*100)}%`;await new Promise(r=>setTimeout(r,0))}}}
-disposeObj(voxelMesh);const geo=makeVoxelGeometry(step*scale),mat=new THREE.MeshStandardMaterial({color:customColor,emissive:customShadow,emissiveIntensity:.16,roughness:.75});voxelMesh=new THREE.InstancedMesh(geo,mat,positions.length);voxelPositions=positions.map(p=>p.clone());voxelColors=positions.map(()=>customColor);const dummy=new THREE.Object3D(),baseCol=new THREE.Color(customColor);positions.forEach((p,i)=>{dummy.position.copy(p);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix);voxelMesh.setColorAt(i,baseCol)});voxelMesh.instanceMatrix.needsUpdate=true;if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true;scene.add(voxelMesh);if(sliceEnabled)updateSlice();$('#stats').textContent=`${sourceName} · ${positions.length.toLocaleString()} voxels · ${((geo.index?geo.index.count:geo.attributes.position.count)/3*positions.length).toLocaleString()} tris · grid ${nx}×${ny}×${nz}`;$('#status').textContent='Done.';$('#voxelize').disabled=false;$('#export').disabled=positions.length===0}
+disposeObj(voxelMesh);const geo=makeVoxelGeometry(step*scale),mat=new THREE.MeshStandardMaterial({color:customColor,emissive:customShadow,emissiveIntensity:.16,roughness:.75});voxelMesh=new THREE.InstancedMesh(geo,mat,positions.length);voxelPositions=positions.map(p=>p.clone());voxelColors=positions.map(()=>customColor);voxelShadows=positions.map(()=>customShadow);const dummy=new THREE.Object3D(),baseCol=new THREE.Color(customColor);positions.forEach((p,i)=>{dummy.position.copy(p);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix);voxelMesh.setColorAt(i,baseCol)});voxelMesh.instanceMatrix.needsUpdate=true;if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true;scene.add(voxelMesh);if(sliceEnabled)updateSlice();$('#stats').textContent=`${sourceName} · ${positions.length.toLocaleString()} voxels · ${((geo.index?geo.index.count:geo.attributes.position.count)/3*positions.length).toLocaleString()} tris · grid ${nx}×${ny}×${nz}`;$('#status').textContent='Done.';$('#voxelize').disabled=false;$('#export').disabled=positions.length===0}
 let pendingExportFileHandle=null;
 async function saveExportBlob(blob,name){
   if(pendingExportFileHandle){
@@ -131,7 +137,7 @@ let paintEnabled=false,painting=false,paintThrough=false;
 const paintRay=new THREE.Raycaster(),mouse=new THREE.Vector2();
 function updateSlice(){if(!voxelMesh)return;const axis=$('#sliceAxis').value,dirn=+$('#sliceDir').value,percent=+$('#sliceDepth').value/100;const box=new THREE.Box3();voxelPositions.forEach(p=>box.expandByPoint(p));const min=box.min[axis],max=box.max[axis],cut=min+(max-min)*percent;const dummy=new THREE.Object3D();for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i],show=!sliceEnabled||(dirn>0?p[axis]<=cut:p[axis]>=cut);dummy.position.copy(p);dummy.quaternion.identity();dummy.scale.setScalar(show?1:0);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix)}voxelMesh.instanceMatrix.needsUpdate=true;voxelMesh.computeBoundingSphere();$('#sliceOut').value=Math.round(percent*100)}
 function resetSliceMatrices(){if(!voxelMesh)return;const dummy=new THREE.Object3D();for(let i=0;i<voxelPositions.length;i++){dummy.position.copy(voxelPositions[i]);dummy.quaternion.identity();dummy.scale.set(1,1,1);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix)}voxelMesh.instanceMatrix.needsUpdate=true}
-function paintAt(ev){if(!paintEnabled||!voxelMesh)return;const rect=canvas.getBoundingClientRect();mouse.x=((ev.clientX-rect.left)/rect.width)*2-1;mouse.y=-((ev.clientY-rect.top)/rect.height)*2+1;paintRay.setFromCamera(mouse,camera);const hits=paintRay.intersectObject(voxelMesh,false);if(!hits.length)return;const first=hits.find(h=>h.instanceId!=null);if(!first)return;const radius=Math.max(0,+$('#brushSize').value|0),step=+$('#voxel').value,col=new THREE.Color(customColor),ids=new Set();if(paintThrough){const ray=paintRay.ray,brushWorld=Math.max(step*.55,radius*step+step*.55),depthSlider=$('#paintDepth'),depthValue=+depthSlider.value|0,maxDepth=depthValue>=+depthSlider.max?0:depthValue*step;const originT=ray.direction.dot(voxelPositions[first.instanceId].clone().sub(ray.origin));for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i],v=p.clone().sub(ray.origin),t=v.dot(ray.direction);if(t<originT-step*.6)continue;if(maxDepth>0&&t>originT+maxDepth+step*.6)continue;const closest=ray.origin.clone().addScaledVector(ray.direction,t);if(p.distanceTo(closest)<=brushWorld)ids.add(i)}}else{const center=voxelPositions[first.instanceId];for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i];if(Math.abs(p.x-center.x)<=radius*step+.001&&Math.abs(p.y-center.y)<=radius*step+.001&&Math.abs(p.z-center.z)<=radius*step+.001)ids.add(i)}}for(const i of ids){voxelMesh.setColorAt(i,col);voxelColors[i]=customColor}if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true}
+function paintAt(ev){if(!paintEnabled||!voxelMesh)return;const rect=canvas.getBoundingClientRect();mouse.x=((ev.clientX-rect.left)/rect.width)*2-1;mouse.y=-((ev.clientY-rect.top)/rect.height)*2+1;paintRay.setFromCamera(mouse,camera);const hits=paintRay.intersectObject(voxelMesh,false);if(!hits.length)return;const first=hits.find(h=>h.instanceId!=null);if(!first)return;const radius=Math.max(0,+$('#brushSize').value|0),step=+$('#voxel').value,col=new THREE.Color(customColor),ids=new Set();if(paintThrough){const ray=paintRay.ray,brushWorld=Math.max(step*.55,radius*step+step*.55),depthSlider=$('#paintDepth'),depthValue=+depthSlider.value|0,maxDepth=depthValue>=+depthSlider.max?0:depthValue*step;const originT=ray.direction.dot(voxelPositions[first.instanceId].clone().sub(ray.origin));for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i],v=p.clone().sub(ray.origin),t=v.dot(ray.direction);if(t<originT-step*.6)continue;if(maxDepth>0&&t>originT+maxDepth+step*.6)continue;const closest=ray.origin.clone().addScaledVector(ray.direction,t);if(p.distanceTo(closest)<=brushWorld)ids.add(i)}}else{const center=voxelPositions[first.instanceId];for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i];if(Math.abs(p.x-center.x)<=radius*step+.001&&Math.abs(p.y-center.y)<=radius*step+.001&&Math.abs(p.z-center.z)<=radius*step+.001)ids.add(i)}}for(const i of ids){voxelMesh.setColorAt(i,col);voxelColors[i]=customColor;voxelShadows[i]=customShadow}if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true}
 let mayaNav=false,navLastX=0,navLastY=0;
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('pointerdown',e=>{if(!paintEnabled)return;if(e.altKey&&e.button===0){e.preventDefault();painting=false;mayaNav=true;navLastX=e.clientX;navLastY=e.clientY;controls.enabled=false;canvas.setPointerCapture?.(e.pointerId);return}if(e.button===0){painting=true;controls.enabled=false;paintAt(e)}else{painting=false;controls.enabled=true}});
@@ -157,8 +163,34 @@ $('#sliceDepth').oninput=updateSlice;$('#sliceOut').onchange=e=>{const v=Math.ma
 $('#xrayMode').onchange=e=>{xrayEnabled=e.target.checked;applyVoxelMaterial();$('#xrayControls').classList.toggle('disabled',!xrayEnabled);$('#status').textContent=xrayEnabled?'X-Ray: see interior colors while painting. Use Slice when you need to select a buried voxel.':'X-Ray off.'};
 $('#xrayOut').onchange=e=>{const v=Math.max(5,Math.min(90,+e.target.value||5));e.target.value=v;$('#xrayOpacity').value=v;applyVoxelMaterial()};
 $('#xrayOpacity').oninput=e=>{$('#xrayOut').value=e.target.value;applyVoxelMaterial()};
-function buildExportGroup(){const group=new THREE.Group();if(!voxelMesh)return group;const geo=voxelMesh.geometry,mat=new THREE.Matrix4(),col=new THREE.Color();for(let i=0;i<voxelMesh.count;i++){voxelMesh.getMatrixAt(i,mat);const g=geo.clone();g.applyMatrix4(mat);if(voxelMesh.instanceColor)voxelMesh.getColorAt(i,col);const m=new THREE.MeshStandardMaterial({color:voxelMesh.instanceColor?col.clone():voxelMesh.material.color.clone(),roughness:.75});const mesh=new THREE.Mesh(g,m);mesh.name='voxel_'+i;group.add(mesh)}return group}
-async function exportFBX(){if(!voxelMesh)return;$('#status').textContent='Preparing FBX…';try{const group=buildExportGroup();const mod=await import('https://cdn.jsdelivr.net/npm/@comfyorg/fbx-exporter-three@1.0.1/+esm');const Exporter=mod.FBXExporter;if(!Exporter)throw new Error('FBX exporter unavailable');const exporter=new Exporter();const data=exporter.parseSync(group,{preset:'maya',includeAnimations:false,embedTextures:false});if(!(data instanceof Uint8Array)||data.byteLength<27)throw new Error('Invalid FBX data');const magic=new TextDecoder().decode(data.slice(0,18));if(!magic.startsWith('Kaydara FBX Binary'))throw new Error('Invalid FBX header');const blob=new Blob([data],{type:'application/octet-stream'});await downloadBlob(blob,`${sourceName}_voxels.fbx`);group.traverse(o=>{o.geometry?.dispose?.();o.material?.dispose?.()})}catch(e){console.error(e);$('#status').textContent='FBX export failed in this browser.'}}
+function buildExportGroup(){
+  const group=new THREE.Group();if(!voxelMesh)return group;
+  const geo=voxelMesh.geometry,im=new THREE.Matrix4(),normalOn=$('#normalBevelEnabled')?.checked!==false;
+  const shared=new Map();
+  for(let i=0;i<voxelMesh.count;i++){
+    voxelMesh.getMatrixAt(i,im);
+    const color=(voxelColors[i]||customColor).toUpperCase(),shadow=(voxelShadows[i]||customShadow).toUpperCase();
+    const key=color+'|'+shadow;
+    let mat=shared.get(key);
+    if(!mat){
+      mat=new THREE.MeshStandardMaterial({
+        name:'VoxelMat_'+color.slice(1),
+        color:new THREE.Color(color),
+        emissive:new THREE.Color(shadow),
+        emissiveIntensity:.16,roughness:.75,
+        normalMap:normalOn?bevelNormalMap:null,
+        normalScale:new THREE.Vector2(normalOn?.8:0,normalOn?.8:0)
+      });
+      shared.set(key,mat);
+    }
+    const g=geo.clone();g.applyMatrix4(im);
+    const mesh=new THREE.Mesh(g,mat);
+    mesh.name='voxel_'+i;group.add(mesh);
+  }
+  group.userData.sharedVoxelMaterials=[...shared.values()];
+  return group;
+}
+async function exportFBX(){if(!voxelMesh)return;$('#status').textContent='Preparing FBX…';try{const group=buildExportGroup();const mod=await import('https://cdn.jsdelivr.net/npm/@comfyorg/fbx-exporter-three@1.0.1/+esm');const Exporter=mod.FBXExporter;if(!Exporter)throw new Error('FBX exporter unavailable');const exporter=new Exporter();const data=exporter.parseSync(group,{preset:'maya',includeAnimations:false,embedTextures:false});if(!(data instanceof Uint8Array)||data.byteLength<27)throw new Error('Invalid FBX data');const magic=new TextDecoder().decode(data.slice(0,18));if(!magic.startsWith('Kaydara FBX Binary'))throw new Error('Invalid FBX header');const blob=new Blob([data],{type:'application/octet-stream'});await downloadBlob(blob,`${sourceName}_voxels.fbx`);group.traverse(o=>o.geometry?.dispose?.());group.userData.sharedVoxelMaterials?.forEach(m=>m.dispose())}catch(e){console.error(e);$('#status').textContent='FBX export failed in this browser.'}}
 async function exportSelected(){
   const fmt=$('#exportFormat').value;
   const ext=fmt==='glb'?'glb':'fbx';
