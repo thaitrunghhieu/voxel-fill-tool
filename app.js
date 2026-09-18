@@ -97,7 +97,18 @@ addEventListener('pointerup',()=>{painting=false;mayaNav=false;controls.enabled=
 $('#paintMode').onchange=e=>{paintEnabled=e.target.checked;canvas.style.cursor=paintEnabled?'crosshair':'grab';$('#status').textContent=paintEnabled?'Paint: Left drag. Rotate: Middle drag or Alt+Left. Pan: Right drag. Wheel: Zoom.':'Paint mode off.'};
 $('#brushSize').oninput=e=>$('#brushOut').value=e.target.value;
 $('#paintThrough').onchange=e=>{paintThrough=e.target.checked;$('#paintThroughControls').classList.toggle('disabled',!paintThrough);$('#status').textContent=paintThrough?'Paint Through: brush paints from the visible hit into interior voxels along the camera ray.':'Paint Through off.'};
-$('#paintDepth').oninput=e=>$('#paintDepthOut').value=(+e.target.value>=+e.target.max)?'ALL':e.target.value+' layers';
+$('#paintDepth').oninput=e=>{
+  const min=+e.target.min||0,max=+e.target.max||1,v=+e.target.value;
+  $('#paintDepthOut').value=Math.round((v-min)/(max-min)*100);
+};
+$('#paintDepthOut').oninput=e=>{
+  const slider=$('#paintDepth');
+  const pct=Math.max(0,Math.min(100,+e.target.value||0));
+  e.target.value=pct;
+  const min=+slider.min||0,max=+slider.max||1;
+  slider.value=min+(max-min)*(pct/100);
+  slider.dispatchEvent(new Event('input',{bubbles:true}));
+};
 $('#sliceMode').onchange=e=>{sliceEnabled=e.target.checked;updateSlice();$('#status').textContent=sliceEnabled?'Slice mode: hidden voxels are not deleted. Paint the exposed inside.':'Slice mode off.'};
 $('#sliceDepth').oninput=updateSlice;$('#sliceOut').onchange=e=>{const v=Math.max(0,Math.min(100,+e.target.value||0));e.target.value=v;$('#sliceDepth').value=v;updateSlice()};$('#sliceAxis').onchange=updateSlice;$('#sliceDir').onchange=updateSlice;
 $('#xrayMode').onchange=e=>{xrayEnabled=e.target.checked;applyVoxelMaterial();$('#xrayControls').classList.toggle('disabled',!xrayEnabled);$('#status').textContent=xrayEnabled?'X-Ray: see interior colors while painting. Use Slice when you need to select a buried voxel.':'X-Ray off.'};
@@ -272,3 +283,26 @@ canvas.addEventListener('pointercancel',()=>{
   painting=false;
   controls.enabled=true;
 },{capture:true});
+
+function setupRangePercentEditors(){
+  document.querySelectorAll('.range-percent[data-slider]').forEach(field=>{
+    const slider=$('#'+field.dataset.slider);
+    if(!slider)return;
+    const sync=()=>{
+      const min=Number(slider.min||0),max=Number(slider.max||100),v=Number(slider.value);
+      field.value=Math.round(max===min?0:(v-min)/(max-min)*100);
+    };
+    slider.addEventListener('input',sync);
+    field.addEventListener('input',()=>{
+      let pct=Math.max(0,Math.min(100,Number(field.value)||0));
+      field.value=pct;
+      const min=Number(slider.min||0),max=Number(slider.max||100),step=Number(slider.step||0);
+      let v=min+(max-min)*(pct/100);
+      if(step>0)v=Math.round((v-min)/step)*step+min;
+      slider.value=v;
+      slider.dispatchEvent(new Event('input',{bubbles:true}));
+    });
+    sync();
+  });
+}
+setupRangePercentEditors();
