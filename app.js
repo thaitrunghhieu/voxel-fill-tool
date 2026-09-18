@@ -17,7 +17,7 @@ const controls=new OrbitControls(camera,canvas); controls.enableDamping=true;
 controls.mouseButtons.LEFT=null; controls.mouseButtons.MIDDLE=THREE.MOUSE.PAN; controls.mouseButtons.RIGHT=THREE.MOUSE.PAN;
 scene.add(new THREE.HemisphereLight(0xffffff,0x333333,2)); const dl=new THREE.DirectionalLight(0xffffff,3);dl.position.set(6,10,8);scene.add(dl);
 const grid=new THREE.GridHelper(30,30,0x555555,0x292929);scene.add(grid);
-let modelRoot=null, voxelMesh=null, meshes=[], sourceName='model', voxelPositions=[], voxelColors=[], voxelShadows=[], sliceEnabled=false, xrayEnabled=false;
+let modelRoot=null, voxelMesh=null, meshes=[], sourceName='model', voxelPositions=[], voxelColors=[], voxelShadows=[], voxelLayers=[], activeLayerView='all', sliceEnabled=false, xrayEnabled=false;
 let exportDirectoryHandle=null;
 const PALETTE={
  Blue:{color:'#45C9FF',shadow:'#2B3E89'}, Brown:{color:'#875530',shadow:'#89542B'},
@@ -84,7 +84,7 @@ function makeVoxelGeometry(size){
   return geo;
 }
 async function voxelize(){if(!modelRoot)return;$('#voxelize').disabled=true;$('#export').disabled=true;$('#status').textContent='Calculating voxels…';await new Promise(r=>setTimeout(r,30));modelRoot.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(modelRoot),step=+$('#voxel').value,scale=+$('#cubeScale').value,mode=$('#mode').value;const size=box.getSize(new THREE.Vector3()), nx=Math.ceil(size.x/step),ny=Math.ceil(size.y/step),nz=Math.ceil(size.z/step),total=nx*ny*nz;if(total>1200000){$('#status').textContent=`Grid too dense (${total.toLocaleString()} cells). Increase voxel size.`;$('#voxelize').disabled=false;return}const positions=[];let n=0;for(let ix=0;ix<nx;ix++){const x=box.min.x+(ix+.5)*step;for(let iy=0;iy<ny;iy++){const y=box.min.y+(iy+.5)*step;for(let iz=0;iz<nz;iz++){const z=box.min.z+(iz+.5)*step,p=new THREE.Vector3(x,y,z);if(mode==='solid'?pointInside(p):nearSurface(p,step*.7))positions.push(p);n++}if(iy%5===0){$('#status').textContent=`Calculating… ${Math.round(n/total*100)}%`;await new Promise(r=>setTimeout(r,0))}}}
-disposeObj(voxelMesh);const geo=makeVoxelGeometry(step*scale),mat=new THREE.MeshStandardMaterial({color:customColor,emissive:customShadow,emissiveIntensity:.16,roughness:.75});voxelMesh=new THREE.InstancedMesh(geo,mat,positions.length);voxelPositions=positions.map(p=>p.clone());voxelColors=positions.map(()=>customColor);voxelShadows=positions.map(()=>customShadow);const dummy=new THREE.Object3D(),baseCol=new THREE.Color(customColor);positions.forEach((p,i)=>{dummy.position.copy(p);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix);voxelMesh.setColorAt(i,baseCol)});voxelMesh.instanceMatrix.needsUpdate=true;if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true;scene.add(voxelMesh);if(sliceEnabled)updateSlice();$('#stats').textContent=`${sourceName} · ${positions.length.toLocaleString()} voxels · ${((geo.index?geo.index.count:geo.attributes.position.count)/3*positions.length).toLocaleString()} tris · grid ${nx}×${ny}×${nz}`;$('#status').textContent='Done.';$('#voxelize').disabled=false;$('#export').disabled=positions.length===0}
+disposeObj(voxelMesh);const geo=makeVoxelGeometry(step*scale),mat=new THREE.MeshStandardMaterial({color:customColor,emissive:customShadow,emissiveIntensity:.16,roughness:.75});voxelMesh=new THREE.InstancedMesh(geo,mat,positions.length);voxelPositions=positions.map(p=>p.clone());voxelColors=positions.map(()=>customColor);voxelShadows=positions.map(()=>customShadow);voxelLayers=new Array(positions.length).fill(0);const dummy=new THREE.Object3D(),baseCol=new THREE.Color(customColor);positions.forEach((p,i)=>{dummy.position.copy(p);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix);voxelMesh.setColorAt(i,baseCol)});voxelMesh.instanceMatrix.needsUpdate=true;if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true;scene.add(voxelMesh);if(sliceEnabled)updateSlice();$('#stats').textContent=`${sourceName} · ${positions.length.toLocaleString()} voxels · ${((geo.index?geo.index.count:geo.attributes.position.count)/3*positions.length).toLocaleString()} tris · grid ${nx}×${ny}×${nz}`;$('#status').textContent='Done.';$('#voxelize').disabled=false;$('#export').disabled=positions.length===0}
 let pendingExportFileHandle=null;
 async function saveExportBlob(blob,name){
   if(pendingExportFileHandle){
@@ -359,6 +359,53 @@ canvas.addEventListener('pointercancel',()=>{
   controls.enabled=true;
 },{capture:true});
 
+
+function hashVoxel(p,step){
+  const x=Math.round(p.x/step),y=Math.round(p.y/step),z=Math.round(p.z/step);
+  let h=(x*73856093)^(y*19349663)^(z*83492791);h=(h^(h>>>13))*1274126177;
+  return ((h^(h>>>16))>>>0)/4294967295;
+}
+function autoSeparateLayers(){
+  if(!voxelMesh||!voxelPositions.length)return;
+  const step=+$('#voxel').value,tol=step*.25,random=(+$('#layerRandom').value||0)/100;
+  const key=p=>Math.round(p.x/step)+','+Math.round(p.y/step)+','+Math.round(p.z/step);
+  let remaining=new Set(voxelPositions.map((_,i)=>i));voxelLayers=new Array(voxelPositions.length).fill(3);
+  const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  for(let depth=0;depth<3&&remaining.size;depth++){
+    const occupied=new Map();for(const i of remaining)occupied.set(key(voxelPositions[i]),i);
+    const shell=[];
+    for(const i of remaining){
+      const p=voxelPositions[i];let exposed=false;
+      for(const d of dirs){const q=new THREE.Vector3(p.x+d[0]*step,p.y+d[1]*step,p.z+d[2]*step);if(!occupied.has(key(q))){exposed=true;break}}
+      if(exposed){
+        // Randomized boundary: some exposed cells stay for the next depth, creating organic color patches.
+        const keep=depth<2&&hashVoxel(p,step)<random*.45;
+        if(!keep)shell.push(i);
+      }
+    }
+    // Never stall an erosion pass.
+    if(!shell.length){for(const i of remaining){shell.push(i);break}}
+    for(const i of shell){voxelLayers[i]=depth;remaining.delete(i)}
+  }
+  for(const i of remaining)voxelLayers[i]=3;
+  updateLayerButtons();showLayer('all');
+}
+function updateLayerButtons(){
+  if(!$('#layerButtons'))return;
+  const counts=[0,0,0,0];for(const d of voxelLayers)counts[Math.max(0,Math.min(3,d||0))]++;
+  $('#layerButtons').querySelectorAll('[data-layer]').forEach(b=>{if(b.dataset.layer!=='all'){const d=+b.dataset.layer;b.textContent='D'+d+'('+counts[d]+')'}});
+}
+function showLayer(which){
+  if(!voxelMesh)return;activeLayerView=which;
+  const dummy=new THREE.Object3D();
+  for(let i=0;i<voxelPositions.length;i++){
+    const visible=which==='all'||voxelLayers[i]===+which;
+    dummy.position.copy(voxelPositions[i]);dummy.quaternion.identity();dummy.scale.setScalar(visible?1:0);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix);
+  }
+  voxelMesh.instanceMatrix.needsUpdate=true;voxelMesh.computeBoundingSphere();
+  $('#layerButtons')?.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.layer===String(which)));
+}
+
 function setupRangePercentEditors(){
   document.querySelectorAll('.range-percent[data-slider]').forEach(field=>{
     const slider=$('#'+field.dataset.slider);
@@ -409,3 +456,7 @@ if($('#roundingEnabled')){
 }
 
 if($('#normalBevelEnabled'))$('#normalBevelEnabled').onchange=()=>{applyVoxelMaterial()};
+
+if($('#autoLayers'))$('#autoLayers').onclick=autoSeparateLayers;
+if($('#layerRandom')){$('#layerRandom').oninput=e=>{$('#layerRandomOut').value=e.target.value};$('#layerRandomOut').oninput=e=>{const v=Math.max(0,Math.min(100,+e.target.value||0));e.target.value=v;$('#layerRandom').value=v}}
+$('#layerButtons')?.addEventListener('click',e=>{const b=e.target.closest('[data-layer]');if(b)showLayer(b.dataset.layer)});
