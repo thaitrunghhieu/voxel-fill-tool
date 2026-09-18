@@ -79,3 +79,25 @@ aside{width:300px;padding:18px 18px}
  #viewport canvas{padding-right:220px}
  #viewport .badge{right:234px}
 }
+
+/* Right inspector: single vertical column, independently scrollable like left sidebar */
+#viewport .layer-box{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  scrollbar-width:thin;
+  scrollbar-color:#666 #181818;
+}
+#viewport .layer-box::-webkit-scrollbar{width:8px}
+#viewport .layer-box::-webkit-scrollbar-track{background:#181818}
+#viewport .layer-box::-webkit-scrollbar-thumb{background:#666;border-radius:8px}
+#viewport .layer-head{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:8px}
+#viewport .layer-head>b{max-width:none!important}
+#viewport .layer-head button{width:100%!important;max-width:none!important}
+#viewport .layer-count-control>div{display:flex!important}
+#viewport .layer-buttons{display:grid!important;grid-template-columns:1fr!important}
+#viewport .depth-fill-list{display:grid!important;grid-template-columns:1fr!important;max-height:none!important;overflow:visible!important}
+#viewport .depth-fill-row{width:100%}
+#viewport .fill-layer-btn,#viewport #matchColorLayers,#viewport .right-export button{width:100%!important}
