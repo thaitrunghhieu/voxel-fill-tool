@@ -146,7 +146,7 @@ async function saveExportBlob(blob,name){
   return true;
 }
 async function downloadBlob(blob,name){return saveExportBlob(blob,name)}
-async function exportGLB(){if(!voxelMesh)return;$('#status').textContent='Exporting GLB…';const group=new THREE.Group();group.add(voxelMesh.clone());new GLTFExporter().parse(group,async res=>{const blob=new Blob([res],{type:'model/gltf-binary'});await downloadBlob(blob,`${sourceName}_voxels.glb`)},e=>{$('#status').textContent='Export failed.';console.error(e)},{binary:true,onlyVisible:true})}
+async function exportGLB(){if(!voxelMesh)return;$('#status').textContent='Exporting GLB…';const group=buildExportGroup();new GLTFExporter().parse(group,async res=>{const blob=new Blob([res],{type:'model/gltf-binary'});await downloadBlob(blob,`${sourceName}_voxels.glb`)},e=>{$('#status').textContent='Export failed.';console.error(e)},{binary:true,onlyVisible:true})}
 function applyVoxelMaterial(){if(!voxelMesh)return;voxelMesh.material.color.set(0xffffff);voxelMesh.material.emissive.set(customShadow);const normalOn=$('#normalBevelEnabled')?.checked!==false;voxelMesh.material.normalMap=normalOn?bevelNormalMap:null;voxelMesh.material.normalScale.set(normalOn?.8:0,normalOn?.8:0);voxelMesh.material.transparent=xrayEnabled;voxelMesh.material.opacity=xrayEnabled?(+$('#xrayOpacity').value/100):1;voxelMesh.material.depthWrite=!xrayEnabled;voxelMesh.material.needsUpdate=true}
 function syncMatEditor(){const c=$('#colorPicker'),s=$('#shadowPicker'),ct=$('#colorHex'),st=$('#shadowHex');if(!c)return;c.value=customColor;s.value=customShadow;ct.value=customColor.toUpperCase();st.value=customShadow.toUpperCase()}
 function validHex(v){v=v.trim();if(!v.startsWith('#'))v='#'+v;return /^#[0-9a-f]{6}$/i.test(v)?v.toUpperCase():null}
@@ -190,7 +190,11 @@ function buildExportGroup(){
   const geo=voxelMesh.geometry,im=new THREE.Matrix4(),normalOn=$('#normalBevelEnabled')?.checked!==false;
   const shared=new Map();
   for(let i=0;i<voxelMesh.count;i++){
-    voxelMesh.getMatrixAt(i,im);
+    // IMPORTANT: export from the canonical voxel position, not the current
+    // InstancedMesh matrix. Layer isolate/slice hides voxels by setting their
+    // instance scale to zero; exporting that matrix made D1/D2/D3 disappear
+    // and left a hollow shell in Maya.
+    im.makeTranslation(voxelPositions[i].x,voxelPositions[i].y,voxelPositions[i].z);
     const color=(voxelColors[i]||customColor).toUpperCase(),shadow=(voxelShadows[i]||customShadow).toUpperCase();
     const key=color+'|'+shadow;
     let mat=shared.get(key);
