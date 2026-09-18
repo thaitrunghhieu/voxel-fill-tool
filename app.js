@@ -179,3 +179,32 @@ document.querySelectorAll('#viewCube [data-view]').forEach(btn=>{
     snapCameraView(btn.dataset.view);
   });
 });
+
+function syncVoxelPercentControls(){
+  const voxel=$('#voxel'), cube=$('#cubeScale');
+  const vp=$('#voxelPct'), cp=$('#cubeScalePct');
+  if(voxel&&vp)vp.value=Math.round((+voxel.value||0)*100);
+  if(cube&&cp)cp.value=Math.round((+cube.value||0)*100);
+}
+if($('#voxelPct')){
+  syncVoxelPercentControls();
+  $('#voxel').addEventListener('input',()=>{$('#voxelPct').value=Math.round((+$('#voxel').value||0)*100)});
+  $('#voxelPct').addEventListener('change',e=>{
+    const slider=$('#voxel'), min=+slider.min||0.01, max=+slider.max||10;
+    const pct=Math.max(min*100,Math.min(max*100,+e.target.value||100));
+    e.target.value=Math.round(pct);
+    slider.value=pct/100;
+    slider.dispatchEvent(new Event('input',{bubbles:true}));
+    slider.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+}
+if($('#cubeScalePct')){
+  $('#cubeScale').addEventListener('input',()=>{$('#cubeScalePct').value=Math.round((+$('#cubeScale').value||0)*100)});
+  $('#cubeScalePct').addEventListener('input',e=>{
+    const slider=$('#cubeScale'), min=+slider.min||0.01, max=+slider.max||2;
+    const pct=Math.max(min*100,Math.min(max*100,+e.target.value||100));
+    e.target.value=Math.round(pct);
+    slider.value=pct/100;
+    slider.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+}
