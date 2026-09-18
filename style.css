@@ -42,3 +42,40 @@
 .depth-fill-row b{font-size:10px}
 .depth-fill-row input[type=color]{width:38px;height:27px;padding:2px;border:1px solid #444;border-radius:5px;background:#222}
 .depth-fill-row button{padding:6px;font-size:10px}
+
+/* Reference layout: left setup / center viewport / right random-layer panel */
+#app{grid-template-columns:300px 1fr}
+aside{width:300px;padding:18px 18px}
+#viewport{overflow:hidden}
+#viewport .view-cube{left:14px!important;right:auto!important;top:14px!important}
+#viewport .layer-box{
+  top:0!important;right:0!important;bottom:0!important;
+  width:280px!important;height:100%!important;
+  border-radius:0!important;border-top:0;border-right:0;border-bottom:0;
+  padding:18px 16px!important;overflow-y:auto;
+  background:#181818!important;box-shadow:-1px 0 0 #333!important;
+  backdrop-filter:none!important
+}
+#viewport canvas{padding-right:280px}
+#viewport .badge{right:294px}
+#viewport .layer-head{align-items:flex-start}
+#viewport .layer-head>b{font-size:16px;line-height:.92;max-width:92px}
+#viewport .layer-head button{margin-top:0;padding:9px 10px;font-size:9px;max-width:92px}
+#viewport .layer-count-control{margin-top:14px}
+#viewport .layer-count-control>div{align-items:center}
+#viewport #matchColorLayers{margin-top:8px}
+#viewport .layer-buttons{grid-template-columns:1fr}
+#viewport .layer-buttons button:first-child{grid-column:auto}
+#viewport .depth-fill-list{max-height:240px}
+.right-export{margin-top:14px;padding-top:12px;border-top:1px solid #333}
+.right-export #stats{margin:0 0 10px}
+.right-export .control{margin:9px 0!important}
+.right-export .hint{font-size:9px;margin:12px 0 0}
+.right-export #status{margin-top:8px}
+@media(max-width:900px){
+ #app{grid-template-columns:230px 1fr}
+ aside{width:230px;padding:14px 12px}
+ #viewport .layer-box{width:220px!important;padding:14px 12px!important}
+ #viewport canvas{padding-right:220px}
+ #viewport .badge{right:234px}
+}
