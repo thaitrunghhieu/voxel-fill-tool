@@ -48,3 +48,7 @@
 #colorLayerList{max-height:300px;overflow:auto}
 .color-dot{width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.45);flex:none}
 .color-layers small{margin-left:auto;opacity:.65;font-size:8px}
+
+.layer-count-control{display:grid;grid-template-columns:1fr auto;align-items:end;gap:6px}
+.layer-count-control>div{grid-column:1/-1}
+.layer-count-control button{width:auto;padding:6px 7px;font-size:9px}
