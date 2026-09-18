@@ -394,7 +394,7 @@ function getDepthLayerCount(){
 }
 function separateInnerLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
-  const layerCount=getDepthLayerCount();
+  const layerCount=getDepthLayerCount(),step=+$('#voxel').value;
   const box=new THREE.Box3();
   for(const p of voxelPositions)box.expandByPoint(p);
   const size=new THREE.Vector3();box.getSize(size);
@@ -402,17 +402,26 @@ function separateInnerLayers(){
   const half=new THREE.Vector3(size.x*.5,size.y*.5,size.z*.5);
   const eps=1e-6;
 
-  // Normalized Chebyshev distance from center. 1 = outer box, 0 = center.
-  // Equal-width inward bands make true nested rectangular layers.
-  voxelLayers=new Array(voxelPositions.length);
+  voxelLayers=new Array(voxelPositions.length).fill(0);
   for(let i=0;i<voxelPositions.length;i++){
     const p=voxelPositions[i];
     const nx=half.x>eps?Math.abs(p.x-center.x)/half.x:0;
     const ny=half.y>eps?Math.abs(p.y-center.y)/half.y:0;
     const nz=half.z>eps?Math.abs(p.z-center.z)/half.z:0;
     const r=Math.max(nx,ny,nz);
-    let d=Math.floor((1-Math.min(1,r))*layerCount);
-    d=Math.max(0,Math.min(layerCount-1,d));
+    const inward=(1-Math.min(1,r))*layerCount;
+
+    // D0 is intentionally untouched: a clean, stable outside band.
+    if(inward<1){voxelLayers[i]=0;continue;}
+
+    // Only D1+ boundaries are roughened. Two hashes make small voxel-sized
+    // steps instead of a smooth/noisy gradient. The value never creates voxels
+    // outside the original filled model.
+    const h=hashVoxel(p,step);
+    const h2=hashVoxel(new THREE.Vector3(p.z,p.x,p.y),step);
+    const jitter=((h+h2)*.5-.5)*1.15;
+    let d=Math.floor(inward+jitter);
+    d=Math.max(1,Math.min(layerCount-1,d));
     voxelLayers[i]=d;
   }
 
@@ -420,7 +429,7 @@ function separateInnerLayers(){
   showLayer('all');
   const counts=new Array(layerCount).fill(0);
   for(const d of voxelLayers)counts[d]++;
-  $('#status').textContent='Inner box layers: '+counts.map((n,i)=>'D'+i+' '+n).join(' · ');
+  $('#status').textContent='Jagged inner layers: D0 clean · D1–D'+(layerCount-1)+' uneven inward borders.';
 }
 function autoSeparateLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
