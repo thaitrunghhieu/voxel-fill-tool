@@ -32,7 +32,28 @@ function resize(){const w=viewport.clientWidth,h=viewport.clientHeight;renderer.
 function disposeObj(o){if(!o)return;o.traverse?.(x=>{x.geometry?.dispose?.();if(Array.isArray(x.material))x.material.forEach(m=>m.dispose());else x.material?.dispose?.()});scene.remove(o)}
 function fit(){if(!modelRoot)return;const b=new THREE.Box3().setFromObject(modelRoot),s=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());const d=Math.max(s.x,s.y,s.z);controls.target.copy(c);camera.position.copy(c).add(new THREE.Vector3(1,0.75,1).normalize().multiplyScalar(d*2.2));camera.near=Math.max(d/1000,.001);camera.far=d*100;camera.updateProjectionMatrix();controls.update()}
 async function loadFile(file){sourceName=file.name.replace(/\.[^.]+$/,''); $('#status').textContent='Loading…';disposeObj(modelRoot);disposeObj(voxelMesh);voxelMesh=null;meshes=[];const ext=file.name.split('.').pop().toLowerCase(),url=URL.createObjectURL(file);try{if(ext==='glb'||ext==='gltf'){const g=await new GLTFLoader().loadAsync(url);modelRoot=g.scene}else if(ext==='obj'){modelRoot=await new OBJLoader().loadAsync(url)}else if(ext==='fbx'){modelRoot=await new FBXLoader().loadAsync(url)}else if(ext==='stl'){const geo=await new STLLoader().loadAsync(url);modelRoot=new THREE.Group();modelRoot.add(new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0x999999,side:THREE.DoubleSide})))}else throw Error('Unsupported format');
-modelRoot.traverse(o=>{if(o.isMesh){o.material=o.material?.clone?.()||new THREE.MeshStandardMaterial();o.material.side=THREE.DoubleSide;meshes.push(o)}});modelRoot.updateMatrixWorld(true);scene.add(modelRoot);fit();$('#voxelize').disabled=false;$('#export').disabled=true;$('#stats').textContent=`${file.name} · ${meshes.length} mesh(es)`;$('#status').textContent='Ready.';applyOriginal()}catch(e){console.error(e);$('#status').textContent='Could not load this model.'}finally{URL.revokeObjectURL(url)}}
+// FBX commonly carries Maya/3ds Max geometric transforms as non-uniform object scale.
+    // Bake every mesh world transform into its vertices, then rebuild everything under
+    // an identity root. This preserves the actual authored shape and prevents the
+    // viewer/voxel grid from applying transform scale a second time.
+    modelRoot.updateMatrixWorld(true);
+    const bakedRoot=new THREE.Group();
+    const bakedMeshes=[];
+    modelRoot.traverse(o=>{
+      if(!o.isMesh)return;
+      const geo=o.geometry.clone();
+      geo.applyMatrix4(o.matrixWorld);
+      geo.computeBoundingBox();geo.computeBoundingSphere();
+      const mat=Array.isArray(o.material)
+        ?o.material.map(m=>{const c=m?.clone?.()||new THREE.MeshStandardMaterial();c.side=THREE.DoubleSide;return c})
+        :(o.material?.clone?.()||new THREE.MeshStandardMaterial());
+      if(!Array.isArray(mat))mat.side=THREE.DoubleSide;
+      const m=new THREE.Mesh(geo,mat);
+      m.name=o.name||'mesh';
+      bakedRoot.add(m);bakedMeshes.push(m);
+    });
+    modelRoot=bakedRoot;meshes=bakedMeshes;
+    modelRoot.updateMatrixWorld(true);scene.add(modelRoot);fit();$('#voxelize').disabled=false;$('#export').disabled=true;$('#stats').textContent=`${file.name} · ${meshes.length} mesh(es)`;$('#status').textContent='Ready.';applyOriginal()}catch(e){console.error(e);$('#status').textContent='Could not load this model.'}finally{URL.revokeObjectURL(url)}}
 function applyOriginal(){if(!modelRoot)return;modelRoot.visible=$('#original').checked;meshes.forEach(m=>m.material.wireframe=$('#wire').checked)}
 function pointInside(p){let hits=[];for(const m of meshes){raycaster.set(p,dir);hits.push(...raycaster.intersectObject(m,false))}hits.sort((a,b)=>a.distance-b.distance);let unique=0,last=-Infinity;for(const h of hits){if(h.distance-last>1e-5){unique++;last=h.distance}}return unique%2===1}
 function nearSurface(p,half){const dirs=[new THREE.Vector3(1,0,0),new THREE.Vector3(-1,0,0),new THREE.Vector3(0,1,0),new THREE.Vector3(0,-1,0),new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,-1)];for(const d of dirs){raycaster.set(p,d);raycaster.far=half*1.05;for(const m of meshes)if(raycaster.intersectObject(m,false).length)return true}return false}
