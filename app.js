@@ -396,23 +396,40 @@ function updateLayerButtons(){
   $('#layerButtons').querySelectorAll('[data-layer]').forEach(b=>{if(b.dataset.layer!=='all'){const d=+b.dataset.layer;b.textContent='D'+d+'('+counts[d]+')'}});
 }
 
-function fillSelectedLayer(){
-  if(!voxelMesh||activeLayerView==='all'){$('#status').textContent='Select D0, D1, D2 or D3 first.';return}
-  const layer=+activeLayerView,col=new THREE.Color(customColor);let count=0;
-  // Instance colors are multiplied by material.color in Three.js, so keep the shared display material white.
+function fillLayer(layer,colorHex){
+  if(!voxelMesh||!voxelPositions.length)return 0;
+  const color=validHex(colorHex)||'#FFFFFF',col=new THREE.Color(color);let count=0;
+  // Per-instance color is the source of truth for viewport color.
   voxelMesh.material.color.set(0xffffff);
   for(let i=0;i<voxelPositions.length;i++){
     if(voxelLayers[i]!==layer)continue;
     voxelMesh.setColorAt(i,col);
-    voxelColors[i]=customColor;
+    voxelColors[i]=color;
+    // Keep the current shadow choice for export/material grouping.
     voxelShadows[i]=customShadow;
     count++;
   }
-  if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true;
+  if(voxelMesh.instanceColor){
+    voxelMesh.instanceColor.needsUpdate=true;
+    voxelMesh.instanceColor.updateRange.offset=0;
+    voxelMesh.instanceColor.updateRange.count=-1;
+  }
   voxelMesh.material.needsUpdate=true;
+  return count;
+}
+function fillLayerFromUI(layer){
+  const input=document.querySelector('.layer-fill-color[data-fill-layer="'+layer+'"]');
+  const count=fillLayer(layer,input?.value||customColor);
   $('#status').textContent='Filled D'+layer+' · '+count.toLocaleString()+' voxels';
 }
-
+function fillAllLayers(){
+  let total=0;
+  for(let d=0;d<4;d++){
+    const input=document.querySelector('.layer-fill-color[data-fill-layer="'+d+'"]');
+    total+=fillLayer(d,input?.value||customColor);
+  }
+  $('#status').textContent='Filled D0–D3 · '+total.toLocaleString()+' voxels';
+}
 function showLayer(which){
   if(!voxelMesh)return;activeLayerView=which;
   const dummy=new THREE.Object3D();
@@ -479,4 +496,9 @@ if($('#autoLayers'))$('#autoLayers').onclick=autoSeparateLayers;
 if($('#layerRandom')){$('#layerRandom').oninput=e=>{$('#layerRandomOut').value=e.target.value};$('#layerRandomOut').oninput=e=>{const v=Math.max(0,Math.min(100,+e.target.value||0));e.target.value=v;$('#layerRandom').value=v}}
 $('#layerButtons')?.addEventListener('click',e=>{const b=e.target.closest('[data-layer]');if(b)showLayer(b.dataset.layer)});
 
-if($('#fillLayerColor'))$('#fillLayerColor').onclick=fillSelectedLayer;
+
+document.querySelector('.layer-fill-grid')?.addEventListener('click',e=>{
+  const b=e.target.closest('[data-fill-action]');
+  if(b)fillLayerFromUI(+b.dataset.fillAction);
+});
+if($('#fillAllLayers'))$('#fillAllLayers').onclick=fillAllLayers;
