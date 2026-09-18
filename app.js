@@ -134,6 +134,26 @@ function snapCameraView(view){
   const target=controls.target.clone();
   let distance=camera.position.distanceTo(target);
   if(!Number.isFinite(distance)||distance<0.001)distance=10;
+
+  painting=false;
+  mayaNav=false;
+  controls.enabled=true;
+  controls.enableRotate=true;
+  controls.enablePan=true;
+  controls.enableZoom=true;
+
+  if(view==='perspective'){
+    const dir=new THREE.Vector3(1,0.75,1).normalize();
+    camera.up.set(0,1,0);
+    camera.position.copy(target).addScaledVector(dir,distance);
+    camera.lookAt(target);
+    controls.target.copy(target);
+    controls.update();
+    document.querySelectorAll('#viewCube [data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view==='perspective'));
+    $('#status').textContent='3D Perspective: Alt + Left/Right drag to orbit.';
+    return;
+  }
+
   const dirs={
     front:new THREE.Vector3(0,0,1),
     back:new THREE.Vector3(0,0,-1),
@@ -141,28 +161,16 @@ function snapCameraView(view){
     right:new THREE.Vector3(1,0,0),
     top:new THREE.Vector3(0,1,0)
   };
-  if(view==='perspective'){
-    const v=new THREE.Vector3(1,0.8,1).normalize();
-    camera.position.copy(target).addScaledVector(v,distance);
-    camera.up.set(0,1,0);
-    camera.lookAt(target);
-    controls.target.copy(target);
-    controls.enabled=true;
-    controls.update();
-    document.querySelectorAll('#viewCube [data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
-    $('#status').textContent='3D Perspective: free orbit enabled.';
-    return;
-  }
   const dir=dirs[view];
   if(!dir)return;
-  camera.position.copy(target).addScaledVector(dir,distance);
   camera.up.set(0,1,0);
   if(view==='top')camera.up.set(0,0,-1);
+  camera.position.copy(target).addScaledVector(dir,distance);
   camera.lookAt(target);
   controls.target.copy(target);
   controls.update();
   document.querySelectorAll('#viewCube [data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
-  $('#status').textContent=view.toUpperCase()+' view';
+  $('#status').textContent=view.toUpperCase()+' view · Alt + Left/Right to orbit';
 }
 document.querySelectorAll('#viewCube [data-view]').forEach(btn=>{
   btn.addEventListener('click',e=>{
