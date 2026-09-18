@@ -38,24 +38,31 @@ function makeVoxelGeometry(size){
   const enabled=$('#roundingEnabled')?.checked!==false;
   const amount=enabled?Math.max(0,Math.min(.45,+($('#rounding')?.value||0))):0;
   if(amount<=.001)return new THREE.BoxGeometry(size,size,size);
-  const radius=Math.min(.49,amount);
-  const shape=new THREE.Shape();
-  const h=.5,r=radius;
-  shape.moveTo(-h+r,-h);
-  shape.lineTo(h-r,-h); shape.quadraticCurveTo(h,-h,h,-h+r);
-  shape.lineTo(h,h-r); shape.quadraticCurveTo(h,h,h-r,h);
-  shape.lineTo(-h+r,h); shape.quadraticCurveTo(-h,h,-h,h-r);
-  shape.lineTo(-h,-h+r); shape.quadraticCurveTo(-h,-h,-h+r,-h);
-  const geo=new THREE.ExtrudeGeometry(shape,{
-    depth:1-2*r,
-    bevelEnabled:true,
-    bevelSegments:1,
-    steps:1,
-    bevelSize:r,
-    bevelThickness:r,
-    curveSegments:1
-  });
-  geo.translate(0,0,-(1-2*r)/2);
+  const r=Math.min(.45,amount),h=.5;
+  // Minimal chamfered cube: 24 vertices, 44 triangles. One bevel band only.
+  const rings=[
+    [[-h+r,-h], [h-r,-h], [h,-h+r], [h,h-r], [h-r,h], [-h+r,h], [-h,h-r], [-h,-h+r]],
+    [[-h+r,-h], [h-r,-h], [h,-h+r], [h,h-r], [h-r,h], [-h+r,h], [-h,h-r], [-h,-h+r]]
+  ];
+  const verts=[];
+  for(let zi=0;zi<2;zi++){const z=zi?-h:h;for(const [x,y] of rings[zi])verts.push(x,y,z)}
+  // inset top/bottom face rings create one chamfer band at z edges
+  const zTop=h-r,zBot=-h+r;
+  for(const [x,y] of rings[0])verts.push(x*(1-r/h),y*(1-r/h),zTop);
+  for(const [x,y] of rings[1])verts.push(x*(1-r/h),y*(1-r/h),zBot);
+  const idx=[];
+  const quad=(a,b,c,d)=>idx.push(a,b,c,a,c,d);
+  // outer vertical sides
+  for(let i=0;i<8;i++){const j=(i+1)%8;quad(i,j,8+j,8+i)}
+  // top and bottom bevel bands
+  for(let i=0;i<8;i++){const j=(i+1)%8;quad(i,j,16+j,16+i);quad(8+j,8+i,24+i,24+j)}
+  // top/bottom caps as fans
+  const topCenter=verts.length/3;verts.push(0,0,h);
+  const botCenter=verts.length/3;verts.push(0,0,-h);
+  for(let i=0;i<8;i++){const j=(i+1)%8;idx.push(topCenter,16+i,16+j);idx.push(botCenter,24+j,24+i)}
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+  geo.setIndex(idx);
   geo.scale(size,size,size);
   geo.computeVertexNormals();
   return geo;
