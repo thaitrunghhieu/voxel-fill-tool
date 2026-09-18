@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Voxel Fill Tool</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.180.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <aside class="panel">
+    <h1>3D Voxel Fill</h1>
+    <p class="muted">Import a closed 3D mesh, then fill its volume with cubes.</p>
+    <label class="upload">Import model<input id="file" type="file" accept=".glb,.gltf,.obj,.stl" /></label>
+    <label>Voxel size <span id="voxelValue"></span><input id="voxelSize" type="range" min="0.05" max="1" step="0.01" value="0.2" /></label>
+    <label>Cube scale <span id="scaleValue"></span><input id="cubeScale" type="range" min="0.4" max="1" step="0.01" value="0.9" /></label>
+    <label>Mode<select id="mode"><option value="solid">Solid Fill</option><option value="surface">Surface Only</option></select></label>
+    <label class="row"><input id="showOriginal" type="checkbox" checked /> Show original</label>
+    <label class="row"><input id="wireframe" type="checkbox" /> Wireframe original</label>
+    <button id="voxelize" disabled>VOXELIZE</button>
+    <button id="export" disabled>EXPORT GLB</button>
+    <button id="reset">RESET</button>
+    <div id="status">Drop a GLB/GLTF/OBJ/STL file into the viewport.</div>
+    <div id="count">Voxels: 0</div>
+  </aside>
+  <main id="viewport"><div class="drop">Drop 3D model here</div></main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
