@@ -472,19 +472,8 @@ function fillLayer(layer,colorHex){
   rebuildColorLayers();
   return count;
 }
-function fillLayerFromUI(layer){
-  const input=document.querySelector('.layer-fill-color[data-fill-layer="'+layer+'"]');
-  const count=fillLayer(layer,input?.value||customColor);
-  $('#status').textContent='Filled D'+layer+' · '+count.toLocaleString()+' voxels';
-}
-function fillAllLayers(){
-  let total=0;
-  for(let d=0;d<4;d++){
-    const input=document.querySelector('.layer-fill-color[data-fill-layer="'+d+'"]');
-    total+=fillLayer(d,input?.value||customColor);
-  }
-  $('#status').textContent='Filled D0–D3 · '+total.toLocaleString()+' voxels';
-}
+
+
 function showLayer(which){
   if(!voxelMesh)return;activeLayerView=which;
   const dummy=new THREE.Object3D();
@@ -566,4 +555,24 @@ if($('#matchColorLayers'))$('#matchColorLayers').onclick=()=>{
   const colors=new Set(voxelColors.map(colorKey));
   $('#layerCount').value=Math.max(1,Math.min(32,colors.size||4));
   if(voxelMesh&&voxelPositions.length)autoSeparateLayers();
+};
+
+$('#depthFillList')?.addEventListener('click',e=>{
+  const b=e.target.closest('[data-depth-fill-action]');
+  if(!b)return;
+  const d=Number(b.dataset.depthFillAction);
+  const input=document.querySelector('[data-depth-fill-color="'+d+'"]');
+  const count=fillLayer(d,input?.value||customColor);
+  // Keep the current depth isolation, but refresh matrices so the filled color is immediately visible.
+  showLayer(activeLayerView);
+  $('#status').textContent='Filled D'+d+' · '+count.toLocaleString()+' voxels';
+});
+if($('#fillAllDepthLayers'))$('#fillAllDepthLayers').onclick=()=>{
+  const n=getDepthLayerCount();let total=0;
+  for(let d=0;d<n;d++){
+    const input=document.querySelector('[data-depth-fill-color="'+d+'"]');
+    total+=fillLayer(d,input?.value||customColor);
+  }
+  showLayer(activeLayerView);
+  $('#status').textContent='Filled D0–D'+(n-1)+' · '+total.toLocaleString()+' voxels';
 };
