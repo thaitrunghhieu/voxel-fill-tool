@@ -394,35 +394,33 @@ function getDepthLayerCount(){
 }
 function separateInnerLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
-  const step=+$('#voxel').value,layerCount=getDepthLayerCount();
-  const coord=p=>[Math.round(p.x/step),Math.round(p.y/step),Math.round(p.z/step)];
-  const keyXYZ=(x,y,z)=>x+','+y+','+z;
-  const coords=voxelPositions.map(coord);
-  let remaining=new Set(voxelPositions.map((_,i)=>i));
-  voxelLayers=new Array(voxelPositions.length).fill(layerCount-1);
-  const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const layerCount=getDepthLayerCount();
+  const box=new THREE.Box3();
+  for(const p of voxelPositions)box.expandByPoint(p);
+  const size=new THREE.Vector3();box.getSize(size);
+  const center=new THREE.Vector3();box.getCenter(center);
+  const half=new THREE.Vector3(size.x*.5,size.y*.5,size.z*.5);
+  const eps=1e-6;
 
-  for(let depth=0;depth<layerCount-1&&remaining.size;depth++){
-    const occupied=new Set();
-    for(const i of remaining){const c=coords[i];occupied.add(keyXYZ(c[0],c[1],c[2]));}
-    const shell=[];
-    for(const i of remaining){
-      const c=coords[i];
-      // A voxel belongs to this shell only if it touches the outside of the CURRENT
-      // remaining volume. Removing this shell first guarantees D1/D2 stay inside D0.
-      let exposed=false;
-      for(const d of dirs){
-        if(!occupied.has(keyXYZ(c[0]+d[0],c[1]+d[1],c[2]+d[2]))){exposed=true;break;}
-      }
-      if(exposed)shell.push(i);
-    }
-    if(!shell.length)break;
-    for(const i of shell){voxelLayers[i]=depth;remaining.delete(i);}
+  // Normalized Chebyshev distance from center. 1 = outer box, 0 = center.
+  // Equal-width inward bands make true nested rectangular layers.
+  voxelLayers=new Array(voxelPositions.length);
+  for(let i=0;i<voxelPositions.length;i++){
+    const p=voxelPositions[i];
+    const nx=half.x>eps?Math.abs(p.x-center.x)/half.x:0;
+    const ny=half.y>eps?Math.abs(p.y-center.y)/half.y:0;
+    const nz=half.z>eps?Math.abs(p.z-center.z)/half.z:0;
+    const r=Math.max(nx,ny,nz);
+    let d=Math.floor((1-Math.min(1,r))*layerCount);
+    d=Math.max(0,Math.min(layerCount-1,d));
+    voxelLayers[i]=d;
   }
-  for(const i of remaining)voxelLayers[i]=layerCount-1;
+
   updateLayerButtons();
   showLayer('all');
-  $('#status').textContent='Inner layers: '+layerCount+' concentric depth layers.';
+  const counts=new Array(layerCount).fill(0);
+  for(const d of voxelLayers)counts[d]++;
+  $('#status').textContent='Inner box layers: '+counts.map((n,i)=>'D'+i+' '+n).join(' · ');
 }
 function autoSeparateLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
