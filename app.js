@@ -437,16 +437,17 @@ function separateInnerLayers(){
     const h2=hashVoxel(new THREE.Vector3(p.y,p.z,p.x),step);
     let d=depth[i];
 
-    // Special handling for the first inner boundary:
-    // depth 1 is D1 by default; punch some of it inward to D2.
-    // depth 2 is D2 by default; pull some of it outward into D1.
-    // D0 (depth 0) is never modified.
-    if(depth[i]===1 && layerCount>2){
-      if(h<.34)d=2;
+    // Exterior surface (depth 0) was already locked to D0 above.
+    // D1 now interlocks directly against the inside of that D0 skin:
+    // some first-inner voxels stay D1, some recede to D2; selected second-inner
+    // voxels become D1 protrusions. Because exposed voxels are always D0, the
+    // outside of the model remains one solid D0 color.
+    if(depth[i]===1){
+      if(layerCount>2 && h<.38)d=2;
       else d=1;
-    }else if(depth[i]===2 && layerCount>2){
-      if(h2<.34)d=1;
-      else d=2;
+    }else if(depth[i]===2){
+      if(h2<.48)d=1;
+      else d=Math.min(2,layerCount-1);
     }else{
       let offset=h<.28?-1:(h>.72?1:0);
       d=depth[i]+offset;
@@ -460,7 +461,7 @@ function separateInnerLayers(){
   showLayer('all');
   const counts=new Array(layerCount).fill(0);
   for(const d of voxelLayers)counts[d]++;
-  $('#status').textContent='Inner jagged layers applied · D0 fixed · D1/D2 interlock ±1 voxel.';
+  $('#status').textContent='Inner jagged layers · exterior locked D0 · D1 interlocks directly behind D0.';
 }
 function autoSeparateLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
