@@ -434,8 +434,24 @@ function separateInnerLayers(){
     // other, while D0 can never be crossed.
     const p=voxelPositions[i];
     const h=hashVoxel(p,step);
-    let offset=h<.30?-1:(h>.70?1:0);
-    let d=depth[i]+offset;
+    const h2=hashVoxel(new THREE.Vector3(p.y,p.z,p.x),step);
+    let d=depth[i];
+
+    // Special handling for the first inner boundary:
+    // depth 1 is D1 by default; punch some of it inward to D2.
+    // depth 2 is D2 by default; pull some of it outward into D1.
+    // D0 (depth 0) is never modified.
+    if(depth[i]===1 && layerCount>2){
+      if(h<.34)d=2;
+      else d=1;
+    }else if(depth[i]===2 && layerCount>2){
+      if(h2<.34)d=1;
+      else d=2;
+    }else{
+      let offset=h<.28?-1:(h>.72?1:0);
+      d=depth[i]+offset;
+    }
+
     d=Math.max(1,Math.min(layerCount-1,d));
     voxelLayers[i]=d;
   }
@@ -444,7 +460,7 @@ function separateInnerLayers(){
   showLayer('all');
   const counts=new Array(layerCount).fill(0);
   for(const d of voxelLayers)counts[d]++;
-  $('#status').textContent='Inner jagged layers applied · D0 fixed · D1+ ±1 voxel border.';
+  $('#status').textContent='Inner jagged layers applied · D0 fixed · D1/D2 interlock ±1 voxel.';
 }
 function autoSeparateLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
