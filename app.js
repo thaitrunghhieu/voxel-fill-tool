@@ -229,3 +229,46 @@ if($('#cubeScalePct')){
     slider.dispatchEvent(new Event('input',{bubbles:true}));
   });
 }
+
+function mayaOrbitMove(e){
+  if(!mayaNav)return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const dx=e.clientX-navLastX,dy=e.clientY-navLastY;
+  navLastX=e.clientX;navLastY=e.clientY;
+  const off=camera.position.clone().sub(controls.target);
+  const sph=new THREE.Spherical().setFromVector3(off);
+  sph.theta-=dx*0.008;
+  sph.phi-=dy*0.008;
+  sph.phi=Math.max(0.01,Math.min(Math.PI-0.01,sph.phi));
+  off.setFromSpherical(sph);
+  camera.position.copy(controls.target).add(off);
+  camera.up.set(0,1,0);
+  camera.lookAt(controls.target);
+}
+canvas.addEventListener('pointerdown',e=>{
+  if(!e.altKey||(e.button!==0&&e.button!==2))return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  painting=false;
+  mayaNav=true;
+  navLastX=e.clientX;
+  navLastY=e.clientY;
+  controls.enabled=false;
+  canvas.setPointerCapture?.(e.pointerId);
+},{capture:true});
+canvas.addEventListener('pointermove',mayaOrbitMove,{capture:true});
+canvas.addEventListener('pointerup',e=>{
+  if(!mayaNav)return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  mayaNav=false;
+  painting=false;
+  controls.enabled=true;
+  try{canvas.releasePointerCapture?.(e.pointerId)}catch(_){}
+},{capture:true});
+canvas.addEventListener('pointercancel',()=>{
+  mayaNav=false;
+  painting=false;
+  controls.enabled=true;
+},{capture:true});
