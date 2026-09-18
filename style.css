@@ -4,3 +4,4 @@
 .palette-scroll .palette{display:flex;width:max-content;min-width:100%;gap:7px;margin-top:0}
 .palette-scroll .mat-swatch{flex:0 0 58px;width:58px}
 
+.num-unit{display:inline-flex;align-items:center;gap:2px}.num-unit i{font-style:normal;color:#aaa;font-size:11px}.num-edit{width:48px;background:#242424;color:#eee;border:1px solid #4a4a4a;border-radius:5px;padding:3px 4px;text-align:right;font-size:11px}.num-edit:focus{outline:1px solid #aaa;border-color:#aaa}.num-edit::-webkit-inner-spin-button{opacity:.6}
