@@ -105,3 +105,33 @@ if(chooseExportFolderBtn){
     $('#exportFolderName').textContent='Browser download folder';
   }
 }
+
+function snapCameraView(view){
+  const target=controls.target.clone();
+  let distance=camera.position.distanceTo(target);
+  if(!Number.isFinite(distance)||distance<0.001)distance=10;
+  const dirs={
+    front:new THREE.Vector3(0,0,1),
+    back:new THREE.Vector3(0,0,-1),
+    left:new THREE.Vector3(-1,0,0),
+    right:new THREE.Vector3(1,0,0),
+    top:new THREE.Vector3(0,1,0)
+  };
+  const dir=dirs[view];
+  if(!dir)return;
+  camera.position.copy(target).addScaledVector(dir,distance);
+  camera.up.set(0,1,0);
+  if(view==='top')camera.up.set(0,0,-1);
+  camera.lookAt(target);
+  controls.target.copy(target);
+  controls.update();
+  document.querySelectorAll('#viewCube [data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+  $('#status').textContent=view.toUpperCase()+' view';
+}
+document.querySelectorAll('#viewCube [data-view]').forEach(btn=>{
+  btn.addEventListener('click',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    snapCameraView(btn.dataset.view);
+  });
+});
