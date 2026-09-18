@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
@@ -38,37 +39,15 @@ function makeVoxelGeometry(size){
   const enabled=$('#roundingEnabled')?.checked!==false;
   const amount=enabled?Math.max(0,Math.min(.45,+($('#rounding')?.value||0))):0;
   if(amount<=.001)return new THREE.BoxGeometry(size,size,size);
-  const r=Math.min(.45,amount),h=.5;
-  // Minimal chamfered cube: 24 vertices, 44 triangles. One bevel band only.
-  const rings=[
-    [[-h+r,-h], [h-r,-h], [h,-h+r], [h,h-r], [h-r,h], [-h+r,h], [-h,h-r], [-h,-h+r]],
-    [[-h+r,-h], [h-r,-h], [h,-h+r], [h,h-r], [h-r,h], [-h+r,h], [-h,h-r], [-h,-h+r]]
-  ];
-  const verts=[];
-  for(let zi=0;zi<2;zi++){const z=zi?-h:h;for(const [x,y] of rings[zi])verts.push(x,y,z)}
-  // inset top/bottom face rings create one chamfer band at z edges
-  const zTop=h-r,zBot=-h+r;
-  for(const [x,y] of rings[0])verts.push(x*(1-r/h),y*(1-r/h),zTop);
-  for(const [x,y] of rings[1])verts.push(x*(1-r/h),y*(1-r/h),zBot);
-  const idx=[];
-  const quad=(a,b,c,d)=>idx.push(a,b,c,a,c,d);
-  // outer vertical sides
-  for(let i=0;i<8;i++){const j=(i+1)%8;quad(i,j,8+j,8+i)}
-  // top and bottom bevel bands
-  for(let i=0;i<8;i++){const j=(i+1)%8;quad(i,j,16+j,16+i);quad(8+j,8+i,24+i,24+j)}
-  // top/bottom caps as fans
-  const topCenter=verts.length/3;verts.push(0,0,h);
-  const botCenter=verts.length/3;verts.push(0,0,-h);
-  for(let i=0;i<8;i++){const j=(i+1)%8;idx.push(topCenter,16+i,16+j);idx.push(botCenter,24+j,24+i)}
-  const geo=new THREE.BufferGeometry();
-  geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
-  geo.setIndex(idx);
+  const r=Math.min(.45,amount);
+  // Stable low-poly rounded cube. One bevel segment avoids the exploded/spiky geometry.
+  const geo=new RoundedBoxGeometry(1,1,1,1,r);
   geo.scale(size,size,size);
   geo.computeVertexNormals();
   return geo;
 }
 async function voxelize(){if(!modelRoot)return;$('#voxelize').disabled=true;$('#export').disabled=true;$('#status').textContent='Calculating voxels…';await new Promise(r=>setTimeout(r,30));modelRoot.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(modelRoot),step=+$('#voxel').value,scale=+$('#cubeScale').value,mode=$('#mode').value;const size=box.getSize(new THREE.Vector3()), nx=Math.ceil(size.x/step),ny=Math.ceil(size.y/step),nz=Math.ceil(size.z/step),total=nx*ny*nz;if(total>1200000){$('#status').textContent=`Grid too dense (${total.toLocaleString()} cells). Increase voxel size.`;$('#voxelize').disabled=false;return}const positions=[];let n=0;for(let ix=0;ix<nx;ix++){const x=box.min.x+(ix+.5)*step;for(let iy=0;iy<ny;iy++){const y=box.min.y+(iy+.5)*step;for(let iz=0;iz<nz;iz++){const z=box.min.z+(iz+.5)*step,p=new THREE.Vector3(x,y,z);if(mode==='solid'?pointInside(p):nearSurface(p,step*.7))positions.push(p);n++}if(iy%5===0){$('#status').textContent=`Calculating… ${Math.round(n/total*100)}%`;await new Promise(r=>setTimeout(r,0))}}}
-disposeObj(voxelMesh);const geo=makeVoxelGeometry(step*scale),mat=new THREE.MeshStandardMaterial({color:customColor,emissive:customShadow,emissiveIntensity:.16,roughness:.75});voxelMesh=new THREE.InstancedMesh(geo,mat,positions.length);voxelPositions=positions.map(p=>p.clone());voxelColors=positions.map(()=>customColor);const dummy=new THREE.Object3D(),baseCol=new THREE.Color(customColor);positions.forEach((p,i)=>{dummy.position.copy(p);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix);voxelMesh.setColorAt(i,baseCol)});voxelMesh.instanceMatrix.needsUpdate=true;if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true;scene.add(voxelMesh);if(sliceEnabled)updateSlice();$('#stats').textContent=`${sourceName} · ${positions.length.toLocaleString()} voxels · ${((geo.index?geo.index.count:geo.attributes.position.count)/3*positions.length).toLocaleString()} tris · grid ${nx}×${ny}×${nz}`;$('#status').textContent='Done.';$('#voxelize').disabled=false;$('#export').disabled=positions.length===0}
+disposeObj(voxelMesh);const geo=makeVoxelGeometry(step*scale),mat=new THREE.MeshStandardMaterial({color:customColor,emissive:customShadow,emissiveIntensity:.16,roughness:.75});voxelMesh=new THREE.InstancedMesh(geo,mat,positions.length);voxelPositions=positions.map(p=>p.clone());voxelColors=positions.map(()=>customColor);const dummy=new THREE.Object3D(),baseCol=new THREE.Color(customColor);positions.forEach((p,i)=>{dummy.position.copy(p);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix);voxelMesh.setColorAt(i,baseCol)});voxelBaseMatrices=[];for(let i=0;i<voxelMesh.count;i++){const bm=new THREE.Matrix4();voxelMesh.getMatrixAt(i,bm);voxelBaseMatrices.push(bm.clone())}voxelMesh.instanceMatrix.needsUpdate=true;if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true;scene.add(voxelMesh);if(sliceEnabled)updateSlice();$('#stats').textContent=`${sourceName} · ${positions.length.toLocaleString()} voxels · ${((geo.index?geo.index.count:geo.attributes.position.count)/3*positions.length).toLocaleString()} tris · grid ${nx}×${ny}×${nz}`;$('#status').textContent='Done.';$('#voxelize').disabled=false;$('#export').disabled=positions.length===0}
 let pendingExportFileHandle=null;
 async function saveExportBlob(blob,name){
   if(pendingExportFileHandle){
@@ -118,8 +97,9 @@ function buildPalette(){const el=$('#palette');for(const [name,p] of Object.entr
 buildPalette();
 $('#colorPicker').oninput=e=>setCustom('color',e.target.value);$('#shadowPicker').oninput=e=>setCustom('shadow',e.target.value);$('#colorHex').onchange=e=>setCustom('color',e.target.value);$('#shadowHex').onchange=e=>setCustom('shadow',e.target.value);
 let paintEnabled=false,painting=false,paintThrough=false;
+let voxelBaseMatrices=[];
 const paintRay=new THREE.Raycaster(),mouse=new THREE.Vector2();
-function updateSlice(){if(!voxelMesh)return;const axis=$('#sliceAxis').value,dirn=+$('#sliceDir').value,percent=+$('#sliceDepth').value/100;const box=new THREE.Box3();voxelPositions.forEach(p=>box.expandByPoint(p));const min=box.min[axis],max=box.max[axis],cut=min+(max-min)*percent,span=max-min;const dummy=new THREE.Object3D();for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i];let show=true;if(sliceEnabled){if(dirn>0)show=p[axis]<=cut;else if(dirn<0)show=p[axis]>=cut;else{const inset=span*.5*percent;show=p[axis]>=min+inset&&p[axis]<=max-inset}}}dummy.position.copy(p);dummy.quaternion.identity();dummy.scale.setScalar(show?1:0);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix)}voxelMesh.instanceMatrix.needsUpdate=true;voxelMesh.computeBoundingSphere();$('#sliceOut').value=Math.round(percent*100)}
+function updateSlice(){if(!voxelMesh)return;const axis=$('#sliceAxis').value,dirn=+$('#sliceDir').value,percent=+$('#sliceDepth').value/100;const box=new THREE.Box3();voxelPositions.forEach(p=>box.expandByPoint(p));const min=box.min[axis],max=box.max[axis],cut=min+(max-min)*percent,span=max-min;const dummy=new THREE.Object3D();for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i];let show=true;if(sliceEnabled){if(dirn>0)show=p[axis]<=cut;else if(dirn<0)show=p[axis]>=cut;else{const inset=span*.5*percent;show=p[axis]>=min+inset&&p[axis]<=max-inset}}}if(show&&voxelBaseMatrices[i])voxelMesh.setMatrixAt(i,voxelBaseMatrices[i]);else{dummy.position.copy(p);dummy.quaternion.identity();dummy.scale.setScalar(0);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix)}}voxelMesh.instanceMatrix.needsUpdate=true;voxelMesh.computeBoundingSphere();$('#sliceOut').value=Math.round(percent*100)}
 function resetSliceMatrices(){if(!voxelMesh)return;const dummy=new THREE.Object3D();for(let i=0;i<voxelPositions.length;i++){dummy.position.copy(voxelPositions[i]);dummy.quaternion.identity();dummy.scale.set(1,1,1);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix)}voxelMesh.instanceMatrix.needsUpdate=true}
 function paintAt(ev){if(!paintEnabled||!voxelMesh)return;const rect=canvas.getBoundingClientRect();mouse.x=((ev.clientX-rect.left)/rect.width)*2-1;mouse.y=-((ev.clientY-rect.top)/rect.height)*2+1;paintRay.setFromCamera(mouse,camera);const hits=paintRay.intersectObject(voxelMesh,false);if(!hits.length)return;const first=hits.find(h=>h.instanceId!=null);if(!first)return;const radius=Math.max(0,+$('#brushSize').value|0),step=+$('#voxel').value,col=new THREE.Color(customColor),ids=new Set();if(paintThrough){const ray=paintRay.ray,brushWorld=Math.max(step*.55,radius*step+step*.55),depthSlider=$('#paintDepth'),depthValue=+depthSlider.value|0,maxDepth=depthValue>=+depthSlider.max?0:depthValue*step;const originT=ray.direction.dot(voxelPositions[first.instanceId].clone().sub(ray.origin));for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i],v=p.clone().sub(ray.origin),t=v.dot(ray.direction);if(t<originT-step*.6)continue;if(maxDepth>0&&t>originT+maxDepth+step*.6)continue;const closest=ray.origin.clone().addScaledVector(ray.direction,t);if(p.distanceTo(closest)<=brushWorld)ids.add(i)}}else{const center=voxelPositions[first.instanceId];for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i];if(Math.abs(p.x-center.x)<=radius*step+.001&&Math.abs(p.y-center.y)<=radius*step+.001&&Math.abs(p.z-center.z)<=radius*step+.001)ids.add(i)}}for(const i of ids){voxelMesh.setColorAt(i,col);voxelColors[i]=customColor}if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true}
 let mayaNav=false,navLastX=0,navLastY=0;
