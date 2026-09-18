@@ -16,3 +16,8 @@
 
 .num-edit{-moz-appearance:textfield;appearance:textfield}
 .num-edit::-webkit-outer-spin-button,.num-edit::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;display:none}
+
+/* Compact numeric percentage fields */
+.num-unit{gap:2px;flex:0 0 auto}
+.num-edit{box-sizing:content-box;width:3ch;min-width:3ch;max-width:4ch;padding:3px 3px;text-align:right}
+.num-unit i{margin-left:0}
