@@ -295,6 +295,8 @@ function snapCameraView(view){
   controls.enableZoom=true;
 
   if(view==='perspective'){
+    camera.fov=50;
+    camera.updateProjectionMatrix();
     const dir=new THREE.Vector3(1,0.75,1).normalize();
     camera.up.set(0,1,0);
     camera.position.copy(target).addScaledVector(dir,distance);
@@ -317,12 +319,22 @@ function snapCameraView(view){
   if(!dir)return;
   camera.up.set(0,1,0);
   if(view==='top')camera.up.set(0,0,-1);
-  camera.position.copy(target).addScaledVector(dir,distance);
+  // Perspective projection makes a circular face look oval even when viewed
+  // straight on if the camera is close. For Maya-style orthographic snap views,
+  // emulate an orthographic lens with a very narrow FOV and a proportionally
+  // larger camera distance. Perspective/3D keeps the normal lens.
+  const oldFov=camera.fov;
+  camera.fov=5;
+  const orthoDistance=distance*Math.tan(THREE.MathUtils.degToRad(oldFov*.5))/Math.tan(THREE.MathUtils.degToRad(camera.fov*.5));
+  camera.position.copy(target).addScaledVector(dir,orthoDistance);
+  camera.near=Math.max(orthoDistance/1000,.001);
+  camera.far=orthoDistance*100;
+  camera.updateProjectionMatrix();
   camera.lookAt(target);
   controls.target.copy(target);
   controls.update();
   document.querySelectorAll('#viewCube [data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
-  $('#status').textContent=view.toUpperCase()+' view · Alt + Left/Right to orbit';
+  $('#status').textContent=view.toUpperCase()+' orthographic-style view · Alt + Left/Right to orbit';
 }
 document.querySelectorAll('#viewCube [data-view]').forEach(btn=>{
   btn.addEventListener('click',e=>{
