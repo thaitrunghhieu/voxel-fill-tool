@@ -555,17 +555,28 @@ if($('#roundingEnabled')){
 
 if($('#normalBevelEnabled'))$('#normalBevelEnabled').onchange=()=>{applyVoxelMaterial()};
 
-if($('#autoLayers'))$('#autoLayers').onclick=autoSeparateLayers;
 if($('#layerRandom')){$('#layerRandom').oninput=e=>{$('#layerRandomOut').value=e.target.value};$('#layerRandomOut').oninput=e=>{const v=Math.max(0,Math.min(100,+e.target.value||0));e.target.value=v;$('#layerRandom').value=v}}
 $('#layerButtons')?.addEventListener('click',e=>{const b=e.target.closest('[data-layer]');if(b)showLayer(b.dataset.layer)});
 
 
 
+let layerSplitMode='random';
+if($('#autoLayers'))$('#autoLayers').onclick=()=>{layerSplitMode='random';autoSeparateLayers()};
 if($('#layerCount'))$('#layerCount').onchange=()=>{
   $('#layerCount').value=getDepthLayerCount();
-  if(voxelMesh&&voxelPositions.length)autoSeparateLayers();
+  if(voxelMesh&&voxelPositions.length){
+    if(layerSplitMode==='box')separateInnerLayers();
+    else autoSeparateLayers();
+  }
 };
-if($('#innerLayers'))$('#innerLayers').onclick=separateInnerLayers;
+if($('#innerLayers'))$('#innerLayers').onclick=()=>{
+  layerSplitMode='box';
+  if(!voxelMesh||!voxelPositions.length){
+    $('#status').textContent='Voxelize model first, then use INNER BOX LAYERS.';
+    return;
+  }
+  separateInnerLayers();
+};
 
 $('#depthFillList')?.addEventListener('click',e=>{
   const b=e.target.closest('[data-depth-fill-action]');
