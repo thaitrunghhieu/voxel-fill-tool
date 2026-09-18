@@ -120,7 +120,7 @@ async function saveExportBlob(blob,name){
 }
 async function downloadBlob(blob,name){return saveExportBlob(blob,name)}
 async function exportGLB(){if(!voxelMesh)return;$('#status').textContent='Exporting GLB…';const group=new THREE.Group();group.add(voxelMesh.clone());new GLTFExporter().parse(group,async res=>{const blob=new Blob([res],{type:'model/gltf-binary'});await downloadBlob(blob,`${sourceName}_voxels.glb`)},e=>{$('#status').textContent='Export failed.';console.error(e)},{binary:true,onlyVisible:true})}
-function applyVoxelMaterial(){if(!voxelMesh)return;voxelMesh.material.color.set(0xffffff);voxelMesh.material.emissive.set(customShadow);voxelMesh.material.normalMap=bevelNormalMap;voxelMesh.material.normalScale.set(.8,.8);voxelMesh.material.transparent=xrayEnabled;voxelMesh.material.opacity=xrayEnabled?(+$('#xrayOpacity').value/100):1;voxelMesh.material.depthWrite=!xrayEnabled;voxelMesh.material.needsUpdate=true}
+function applyVoxelMaterial(){if(!voxelMesh)return;voxelMesh.material.color.set(0xffffff);voxelMesh.material.emissive.set(customShadow);const normalOn=$('#normalBevelEnabled')?.checked!==false;voxelMesh.material.normalMap=normalOn?bevelNormalMap:null;voxelMesh.material.normalScale.set(normalOn?.8:0,normalOn?.8:0);voxelMesh.material.transparent=xrayEnabled;voxelMesh.material.opacity=xrayEnabled?(+$('#xrayOpacity').value/100):1;voxelMesh.material.depthWrite=!xrayEnabled;voxelMesh.material.needsUpdate=true}
 function syncMatEditor(){const c=$('#colorPicker'),s=$('#shadowPicker'),ct=$('#colorHex'),st=$('#shadowHex');if(!c)return;c.value=customColor;s.value=customShadow;ct.value=customColor.toUpperCase();st.value=customShadow.toUpperCase()}
 function validHex(v){v=v.trim();if(!v.startsWith('#'))v='#'+v;return /^#[0-9a-f]{6}$/i.test(v)?v.toUpperCase():null}
 function setCustom(which,value){const v=validHex(value);if(!v)return;if(which==='color')customColor=v;else customShadow=v;syncMatEditor();applyVoxelMaterial()}
@@ -375,3 +375,5 @@ if($('#roundingEnabled')){
   };
   updateRoundUI();
 }
+
+if($('#normalBevelEnabled'))$('#normalBevelEnabled').onchange=()=>{applyVoxelMaterial()};
