@@ -3,4 +3,4 @@
 .palette-scroll::-webkit-scrollbar{height:8px}.palette-scroll::-webkit-scrollbar-track{background:#222;border-radius:8px}.palette-scroll::-webkit-scrollbar-thumb{background:#666;border-radius:8px}.palette-scroll::-webkit-scrollbar-thumb:hover{background:#888}
 .palette-scroll .palette{display:flex;width:max-content;min-width:100%;gap:7px;margin-top:0}
 .palette-scroll .mat-swatch{flex:0 0 58px;width:58px}
-.palette-scroll-hint{font-size:8px;color:#666;text-align:center;margin-top:-2px;user-select:none}
+
