@@ -191,16 +191,38 @@ function buildExportGroup(){
   group.userData.sharedVoxelMaterials=[...shared.values()];
   return group;
 }
+async function exportJSON(){
+  if(!voxelMesh)return;
+  $('#status').textContent='Exporting JSON…';
+  const step=+$('#voxel').value,scale=+$('#cubeScale').value;
+  const data={
+    format:'voxel-fill-tool',
+    version:1,
+    source:sourceName,
+    voxelSize:step,
+    cubeScale:scale,
+    cornerRound:+($('#rounding')?.value||0),
+    layerCount:getDepthLayerCount(),
+    voxels:voxelPositions.map((p,i)=>({
+      x:+p.x.toFixed(6),y:+p.y.toFixed(6),z:+p.z.toFixed(6),
+      color:(voxelColors[i]||customColor).toUpperCase(),
+      shadow:(voxelShadows[i]||customShadow).toUpperCase(),
+      layer:voxelLayers[i]??0
+    }))
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  await downloadBlob(blob,`${sourceName}_voxels.json`);
+}
 async function exportFBX(){if(!voxelMesh)return;$('#status').textContent='Preparing FBX…';try{const group=buildExportGroup();const mod=await import('https://cdn.jsdelivr.net/npm/@comfyorg/fbx-exporter-three@1.0.1/+esm');const Exporter=mod.FBXExporter;if(!Exporter)throw new Error('FBX exporter unavailable');const exporter=new Exporter();const data=exporter.parseSync(group,{preset:'maya',includeAnimations:false,embedTextures:true});if(!(data instanceof Uint8Array)||data.byteLength<27)throw new Error('Invalid FBX data');const magic=new TextDecoder().decode(data.slice(0,18));if(!magic.startsWith('Kaydara FBX Binary'))throw new Error('Invalid FBX header');const blob=new Blob([data],{type:'application/octet-stream'});await downloadBlob(blob,`${sourceName}_voxels.fbx`);group.traverse(o=>o.geometry?.dispose?.());group.userData.sharedVoxelMaterials?.forEach(m=>m.dispose())}catch(e){console.error(e);$('#status').textContent='FBX export failed in this browser.'}}
 async function exportSelected(){
   const fmt=$('#exportFormat').value;
-  const ext=fmt==='glb'?'glb':'fbx';
+  const ext=fmt==='json'?'json':fmt==='glb'?'glb':'fbx';
   const name=`${sourceName}_voxels.${ext}`;
   pendingExportFileHandle=null;
 
   if('showSaveFilePicker' in window){
     try{
-      const mime=ext==='glb'?'model/gltf-binary':'application/octet-stream';
+      const mime=ext==='json'?'application/json':ext==='glb'?'model/gltf-binary':'application/octet-stream';
       pendingExportFileHandle=await window.showSaveFilePicker({
         suggestedName:name,
         types:[{description:ext.toUpperCase()+' file',accept:{[mime]:['.'+ext]}}]
@@ -214,7 +236,8 @@ async function exportSelected(){
     }
   }
 
-  if(fmt==='glb')await exportGLB();
+  if(fmt==='json')await exportJSON();
+  else if(fmt==='glb')await exportGLB();
   else await exportFBX();
 }
 $('#file').onchange=e=>e.target.files[0]&&loadFile(e.target.files[0]);const drop=$('#drop');['dragenter','dragover'].forEach(x=>drop.addEventListener(x,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(x=>drop.addEventListener(x,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>e.dataTransfer.files[0]&&loadFile(e.dataTransfer.files[0]));
