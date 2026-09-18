@@ -40,7 +40,8 @@ function makeVoxelGeometry(size){
   const amount=enabled?Math.max(0,Math.min(.45,+($('#rounding')?.value||0))):0;
   if(amount<=.001)return new THREE.BoxGeometry(size,size,size);
   const radius=Math.min(.49,amount);
-  const geo=new RoundedBoxGeometry(1,1,1,4,radius);
+  // Minimum rounded topology: a single bevel segment. This matches the user's low-tris reference.
+  const geo=new RoundedBoxGeometry(1,1,1,1,radius);
   geo.scale(size,size,size);
   geo.computeVertexNormals();
   return geo;
