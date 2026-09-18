@@ -399,37 +399,45 @@ function hashVoxel(p,step){
   let h=(x*73856093)^(y*19349663)^(z*83492791);h=(h^(h>>>13))*1274126177;
   return ((h^(h>>>16))>>>0)/4294967295;
 }
+function getDepthLayerCount(){
+  return Math.max(1,Math.min(32,+($('#layerCount')?.value||4)|0));
+}
 function autoSeparateLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
-  const step=+$('#voxel').value,tol=step*.25,random=(+$('#layerRandom').value||0)/100;
+  const step=+$('#voxel').value,random=(+$('#layerRandom').value||0)/100,layerCount=getDepthLayerCount();
   const key=p=>Math.round(p.x/step)+','+Math.round(p.y/step)+','+Math.round(p.z/step);
-  let remaining=new Set(voxelPositions.map((_,i)=>i));voxelLayers=new Array(voxelPositions.length).fill(3);
+  let remaining=new Set(voxelPositions.map((_,i)=>i));voxelLayers=new Array(voxelPositions.length).fill(layerCount-1);
   const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
-  for(let depth=0;depth<3&&remaining.size;depth++){
+  for(let depth=0;depth<layerCount-1&&remaining.size;depth++){
     const occupied=new Map();for(const i of remaining)occupied.set(key(voxelPositions[i]),i);
     const shell=[];
     for(const i of remaining){
       const p=voxelPositions[i];let exposed=false;
-      for(const d of dirs){const q=new THREE.Vector3(p.x+d[0]*step,p.y+d[1]*step,p.z+d[2]*step);if(!occupied.has(key(q))){exposed=true;break}}
+      for(const d of dirs){
+        const q=new THREE.Vector3(p.x+d[0]*step,p.y+d[1]*step,p.z+d[2]*step);
+        if(!occupied.has(key(q))){exposed=true;break}
+      }
       if(exposed){
-        // Randomized boundary: some exposed cells stay for the next depth, creating organic color patches.
-        const keep=depth<2&&hashVoxel(p,step)<random*.45;
+        const keep=hashVoxel(p,step)<random*.45;
         if(!keep)shell.push(i);
       }
     }
-    // Never stall an erosion pass.
     if(!shell.length){for(const i of remaining){shell.push(i);break}}
     for(const i of shell){voxelLayers[i]=depth;remaining.delete(i)}
   }
-  for(const i of remaining)voxelLayers[i]=3;
+  for(const i of remaining)voxelLayers[i]=layerCount-1;
   updateLayerButtons();showLayer('all');
 }
 function updateLayerButtons(){
-  if(!$('#layerButtons'))return;
-  const counts=[0,0,0,0];for(const d of voxelLayers)counts[Math.max(0,Math.min(3,d||0))]++;
-  $('#layerButtons').querySelectorAll('[data-layer]').forEach(b=>{if(b.dataset.layer!=='all'){const d=+b.dataset.layer;b.textContent='D'+d+'('+counts[d]+')'}});
+  const el=$('#layerButtons');if(!el)return;
+  const layerCount=getDepthLayerCount(),counts=new Array(layerCount).fill(0);
+  for(const d of voxelLayers)if(d>=0&&d<layerCount)counts[d]++;
+  el.innerHTML='<button type="button" data-layer="all" class="active">ALL LAYERS</button>';
+  for(let d=0;d<layerCount;d++){
+    const b=document.createElement('button');b.type='button';b.dataset.layer=String(d);
+    b.textContent='D'+d+'('+counts[d]+')';el.appendChild(b);
+  }
 }
-
 function fillLayer(layer,colorHex){
   if(!voxelMesh||!voxelPositions.length)return 0;
   const color=validHex(colorHex)||'#FFFFFF',col=new THREE.Color(color);let count=0;
@@ -533,13 +541,17 @@ if($('#layerRandom')){$('#layerRandom').oninput=e=>{$('#layerRandomOut').value=e
 $('#layerButtons')?.addEventListener('click',e=>{const b=e.target.closest('[data-layer]');if(b)showLayer(b.dataset.layer)});
 
 
-document.querySelector('.layer-fill-grid')?.addEventListener('click',e=>{
-  const b=e.target.closest('[data-fill-action]');
-  if(b)fillLayerFromUI(+b.dataset.fillAction);
-});
-if($('#fillAllLayers'))$('#fillAllLayers').onclick=fillAllLayers;
-
 $('#colorLayers')?.addEventListener('click',e=>{
   const b=e.target.closest('[data-color-layer]');
   if(b)showColorLayer(b.dataset.colorLayer);
 });
+
+if($('#layerCount'))$('#layerCount').onchange=()=>{
+  $('#layerCount').value=getDepthLayerCount();
+  if(voxelMesh&&voxelPositions.length)autoSeparateLayers();
+};
+if($('#matchColorLayers'))$('#matchColorLayers').onclick=()=>{
+  const colors=new Set(voxelColors.map(colorKey));
+  $('#layerCount').value=Math.max(1,Math.min(32,colors.size||4));
+  if(voxelMesh&&voxelPositions.length)autoSeparateLayers();
+};
