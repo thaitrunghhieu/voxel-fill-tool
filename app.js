@@ -55,7 +55,7 @@ function makeBevelNormalMap(){
     data[i+2]=Math.round((nz*.5+.5)*255);
     data[i+3]=255;
   }
-  const tex=new THREE.DataTexture(data,n,n,THREE.RGBAFormat);
+  const tex=new THREE.DataTexture(data,n,n,THREE.RGBAFormat);tex.name='Voxel_Bevel_Normal';
   tex.wrapS=tex.wrapT=THREE.ClampToEdgeWrapping;
   tex.minFilter=THREE.LinearFilter;tex.magFilter=THREE.LinearFilter;
   tex.generateMipmaps=false;tex.colorSpace=THREE.NoColorSpace;tex.needsUpdate=true;
@@ -190,7 +190,7 @@ function buildExportGroup(){
   group.userData.sharedVoxelMaterials=[...shared.values()];
   return group;
 }
-async function exportFBX(){if(!voxelMesh)return;$('#status').textContent='Preparing FBX…';try{const group=buildExportGroup();const mod=await import('https://cdn.jsdelivr.net/npm/@comfyorg/fbx-exporter-three@1.0.1/+esm');const Exporter=mod.FBXExporter;if(!Exporter)throw new Error('FBX exporter unavailable');const exporter=new Exporter();const data=exporter.parseSync(group,{preset:'maya',includeAnimations:false,embedTextures:false});if(!(data instanceof Uint8Array)||data.byteLength<27)throw new Error('Invalid FBX data');const magic=new TextDecoder().decode(data.slice(0,18));if(!magic.startsWith('Kaydara FBX Binary'))throw new Error('Invalid FBX header');const blob=new Blob([data],{type:'application/octet-stream'});await downloadBlob(blob,`${sourceName}_voxels.fbx`);group.traverse(o=>o.geometry?.dispose?.());group.userData.sharedVoxelMaterials?.forEach(m=>m.dispose())}catch(e){console.error(e);$('#status').textContent='FBX export failed in this browser.'}}
+async function exportFBX(){if(!voxelMesh)return;$('#status').textContent='Preparing FBX…';try{const group=buildExportGroup();const mod=await import('https://cdn.jsdelivr.net/npm/@comfyorg/fbx-exporter-three@1.0.1/+esm');const Exporter=mod.FBXExporter;if(!Exporter)throw new Error('FBX exporter unavailable');const exporter=new Exporter();const data=exporter.parseSync(group,{preset:'maya',includeAnimations:false,embedTextures:true});if(!(data instanceof Uint8Array)||data.byteLength<27)throw new Error('Invalid FBX data');const magic=new TextDecoder().decode(data.slice(0,18));if(!magic.startsWith('Kaydara FBX Binary'))throw new Error('Invalid FBX header');const blob=new Blob([data],{type:'application/octet-stream'});await downloadBlob(blob,`${sourceName}_voxels.fbx`);group.traverse(o=>o.geometry?.dispose?.());group.userData.sharedVoxelMaterials?.forEach(m=>m.dispose())}catch(e){console.error(e);$('#status').textContent='FBX export failed in this browser.'}}
 async function exportSelected(){
   const fmt=$('#exportFormat').value;
   const ext=fmt==='glb'?'glb':'fbx';
