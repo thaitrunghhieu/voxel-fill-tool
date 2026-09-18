@@ -36,7 +36,7 @@ function applyOriginal(){if(!modelRoot)return;modelRoot.visible=$('#original').c
 function pointInside(p){let hits=[];for(const m of meshes){raycaster.set(p,dir);hits.push(...raycaster.intersectObject(m,false))}hits.sort((a,b)=>a.distance-b.distance);let unique=0,last=-Infinity;for(const h of hits){if(h.distance-last>1e-5){unique++;last=h.distance}}return unique%2===1}
 function nearSurface(p,half){const dirs=[new THREE.Vector3(1,0,0),new THREE.Vector3(-1,0,0),new THREE.Vector3(0,1,0),new THREE.Vector3(0,-1,0),new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,-1)];for(const d of dirs){raycaster.set(p,d);raycaster.far=half*1.05;for(const m of meshes)if(raycaster.intersectObject(m,false).length)return true}return false}
 function makeVoxelGeometry(size){
-  const r=Math.max(0,Math.min(.45,+($('#rounding')?.value||0)));
+  const enabled=$('#roundingEnabled')?.checked!==false;const r=enabled?Math.max(0,Math.min(.45,+($('#rounding')?.value||0))):0;
   if(r<=.001)return new THREE.BoxGeometry(size,size,size);
   return new RoundedBoxGeometry(size,size,size,3,size*r);
 }
@@ -324,4 +324,17 @@ if($('#rounding')){
   };
   $('#roundingPct').onchange=()=>{if(voxelMesh)voxelize()};
   syncRound();
+}
+
+if($('#roundingEnabled')){
+  const updateRoundUI=()=>{
+    const on=$('#roundingEnabled').checked;
+    $('#rounding').disabled=!on;
+    $('#roundingPct').disabled=!on;
+  };
+  $('#roundingEnabled').onchange=()=>{
+    updateRoundUI();
+    if(voxelMesh)voxelize();
+  };
+  updateRoundUI();
 }
