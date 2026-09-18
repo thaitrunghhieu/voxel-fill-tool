@@ -36,23 +36,20 @@ function pointInside(p){let hits=[];for(const m of meshes){raycaster.set(p,dir);
 function nearSurface(p,half){const dirs=[new THREE.Vector3(1,0,0),new THREE.Vector3(-1,0,0),new THREE.Vector3(0,1,0),new THREE.Vector3(0,-1,0),new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,-1)];for(const d of dirs){raycaster.set(p,d);raycaster.far=half*1.05;for(const m of meshes)if(raycaster.intersectObject(m,false).length)return true}return false}
 async function voxelize(){if(!modelRoot)return;$('#voxelize').disabled=true;$('#export').disabled=true;$('#status').textContent='Calculating voxels…';await new Promise(r=>setTimeout(r,30));modelRoot.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(modelRoot),step=+$('#voxel').value,scale=+$('#cubeScale').value,mode=$('#mode').value;const size=box.getSize(new THREE.Vector3()), nx=Math.ceil(size.x/step),ny=Math.ceil(size.y/step),nz=Math.ceil(size.z/step),total=nx*ny*nz;if(total>1200000){$('#status').textContent=`Grid too dense (${total.toLocaleString()} cells). Increase voxel size.`;$('#voxelize').disabled=false;return}const positions=[];let n=0;for(let ix=0;ix<nx;ix++){const x=box.min.x+(ix+.5)*step;for(let iy=0;iy<ny;iy++){const y=box.min.y+(iy+.5)*step;for(let iz=0;iz<nz;iz++){const z=box.min.z+(iz+.5)*step,p=new THREE.Vector3(x,y,z);if(mode==='solid'?pointInside(p):nearSurface(p,step*.7))positions.push(p);n++}if(iy%5===0){$('#status').textContent=`Calculating… ${Math.round(n/total*100)}%`;await new Promise(r=>setTimeout(r,0))}}}
 disposeObj(voxelMesh);const geo=new THREE.BoxGeometry(step*scale,step*scale,step*scale),mat=new THREE.MeshStandardMaterial({color:customColor,emissive:customShadow,emissiveIntensity:.16,roughness:.75});voxelMesh=new THREE.InstancedMesh(geo,mat,positions.length);voxelPositions=positions.map(p=>p.clone());voxelColors=positions.map(()=>customColor);const dummy=new THREE.Object3D(),baseCol=new THREE.Color(customColor);positions.forEach((p,i)=>{dummy.position.copy(p);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix);voxelMesh.setColorAt(i,baseCol)});voxelMesh.instanceMatrix.needsUpdate=true;if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true;scene.add(voxelMesh);if(sliceEnabled)updateSlice();$('#stats').textContent=`${sourceName} · ${positions.length.toLocaleString()} voxels · grid ${nx}×${ny}×${nz}`;$('#status').textContent='Done.';$('#voxelize').disabled=false;$('#export').disabled=positions.length===0}
+let pendingExportFileHandle=null;
 async function saveExportBlob(blob,name){
-  const ext=(name.split('.').pop()||'').toLowerCase();
-  const mime=ext==='fbx'?'application/octet-stream':ext==='glb'?'model/gltf-binary':'application/octet-stream';
-  if('showSaveFilePicker' in window){
+  if(pendingExportFileHandle){
     try{
-      const handle=await window.showSaveFilePicker({
-        suggestedName:name,
-        types:[{description:ext.toUpperCase()+' file',accept:{[mime]:['.'+ext]}}]
-      });
+      const handle=pendingExportFileHandle;
+      pendingExportFileHandle=null;
       const writable=await handle.createWritable();
       await writable.write(blob);
       await writable.close();
       $('#status').textContent='Saved: '+handle.name;
       return true;
     }catch(e){
-      if(e?.name==='AbortError'){ $('#status').textContent='Export cancelled.'; return false; }
-      console.warn('Save picker failed, trying folder/download fallback.',e);
+      pendingExportFileHandle=null;
+      console.warn('Direct save failed, trying folder/download fallback.',e);
     }
   }
   if(exportDirectoryHandle){
@@ -79,7 +76,7 @@ async function saveExportBlob(blob,name){
   return true;
 }
 async function downloadBlob(blob,name){return saveExportBlob(blob,name)}
-async function exportGLB(){if(!voxelMesh)return;$('#status').textContent='Exporting GLB…';const group=new THREE.Group();group.add(voxelMesh.clone());new GLTFExporter().parse(group,res=>{const blob=new Blob([res],{type:'model/gltf-binary'});downloadBlob(blob,`${sourceName}_voxels.glb`);$('#status').textContent='Exported GLB.'},e=>{$('#status').textContent='Export failed.';console.error(e)},{binary:true,onlyVisible:true})}
+async function exportGLB(){if(!voxelMesh)return;$('#status').textContent='Exporting GLB…';const group=new THREE.Group();group.add(voxelMesh.clone());new GLTFExporter().parse(group,async res=>{const blob=new Blob([res],{type:'model/gltf-binary'});await downloadBlob(blob,`${sourceName}_voxels.glb`)},e=>{$('#status').textContent='Export failed.';console.error(e)},{binary:true,onlyVisible:true})}
 function applyVoxelMaterial(){if(!voxelMesh)return;voxelMesh.material.color.set(0xffffff);voxelMesh.material.emissive.set(customShadow);voxelMesh.material.transparent=xrayEnabled;voxelMesh.material.opacity=xrayEnabled?(+$('#xrayOpacity').value/100):1;voxelMesh.material.depthWrite=!xrayEnabled;voxelMesh.material.needsUpdate=true}
 function syncMatEditor(){const c=$('#colorPicker'),s=$('#shadowPicker'),ct=$('#colorHex'),st=$('#shadowHex');if(!c)return;c.value=customColor;s.value=customShadow;ct.value=customColor.toUpperCase();st.value=customShadow.toUpperCase()}
 function validHex(v){v=v.trim();if(!v.startsWith('#'))v='#'+v;return /^#[0-9a-f]{6}$/i.test(v)?v.toUpperCase():null}
@@ -107,8 +104,32 @@ $('#xrayMode').onchange=e=>{xrayEnabled=e.target.checked;applyVoxelMaterial();$(
 $('#xrayOut').onchange=e=>{const v=Math.max(5,Math.min(90,+e.target.value||5));e.target.value=v;$('#xrayOpacity').value=v;applyVoxelMaterial()};
 $('#xrayOpacity').oninput=e=>{$('#xrayOut').value=e.target.value;applyVoxelMaterial()};
 function buildExportGroup(){const group=new THREE.Group();if(!voxelMesh)return group;const geo=voxelMesh.geometry,mat=new THREE.Matrix4(),col=new THREE.Color();for(let i=0;i<voxelMesh.count;i++){voxelMesh.getMatrixAt(i,mat);const g=geo.clone();g.applyMatrix4(mat);if(voxelMesh.instanceColor)voxelMesh.getColorAt(i,col);const m=new THREE.MeshStandardMaterial({color:voxelMesh.instanceColor?col.clone():voxelMesh.material.color.clone(),roughness:.75});const mesh=new THREE.Mesh(g,m);mesh.name='voxel_'+i;group.add(mesh)}return group}
-async function exportFBX(){if(!voxelMesh)return;$('#status').textContent='Preparing FBX…';try{const group=buildExportGroup();const mod=await import('https://cdn.jsdelivr.net/npm/three-fbx-exporter@0.3.0/+esm');const Exporter=mod.FBXExporter||mod.default;if(!Exporter)throw new Error('FBX exporter unavailable');const exporter=new Exporter();const data=exporter.parse(group);const blob=data instanceof Blob?data:new Blob([data],{type:'application/octet-stream'});downloadBlob(blob,`${sourceName}_voxels.fbx`);group.traverse(o=>{o.geometry?.dispose?.();o.material?.dispose?.()});$('#status').textContent='Exported FBX.'}catch(e){console.error(e);$('#status').textContent='FBX export failed in this browser.'}}
-function exportSelected(){const fmt=$('#exportFormat').value;if(fmt==='glb')exportGLB();else exportFBX()}
+async function exportFBX(){if(!voxelMesh)return;$('#status').textContent='Preparing FBX…';try{const group=buildExportGroup();const mod=await import('https://cdn.jsdelivr.net/npm/three-fbx-exporter@0.3.0/+esm');const Exporter=mod.FBXExporter||mod.default;if(!Exporter)throw new Error('FBX exporter unavailable');const exporter=new Exporter();const data=exporter.parse(group);const blob=data instanceof Blob?data:new Blob([data],{type:'application/octet-stream'});await downloadBlob(blob,`${sourceName}_voxels.fbx`);group.traverse(o=>{o.geometry?.dispose?.();o.material?.dispose?.()})}catch(e){console.error(e);$('#status').textContent='FBX export failed in this browser.'}}
+async function exportSelected(){
+  const fmt=$('#exportFormat').value;
+  const ext=fmt==='glb'?'glb':'fbx';
+  const name=`${sourceName}_voxels.${ext}`;
+  pendingExportFileHandle=null;
+
+  if('showSaveFilePicker' in window){
+    try{
+      const mime=ext==='glb'?'model/gltf-binary':'application/octet-stream';
+      pendingExportFileHandle=await window.showSaveFilePicker({
+        suggestedName:name,
+        types:[{description:ext.toUpperCase()+' file',accept:{[mime]:['.'+ext]}}]
+      });
+    }catch(e){
+      if(e?.name==='AbortError'){
+        $('#status').textContent='Export cancelled.';
+        return;
+      }
+      console.warn('Save picker unavailable, using selected folder/download.',e);
+    }
+  }
+
+  if(fmt==='glb')await exportGLB();
+  else await exportFBX();
+}
 $('#file').onchange=e=>e.target.files[0]&&loadFile(e.target.files[0]);const drop=$('#drop');['dragenter','dragover'].forEach(x=>drop.addEventListener(x,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(x=>drop.addEventListener(x,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>e.dataTransfer.files[0]&&loadFile(e.dataTransfer.files[0]));
 $('#voxel').oninput=e=>$('#voxelOut').value=e.target.value;$('#cubeScale').oninput=e=>$('#scaleOut').value=e.target.value;$('#original').onchange=applyOriginal;$('#wire').onchange=applyOriginal;$('#voxelize').onclick=voxelize;$('#export').onclick=exportSelected;$('#reset').onclick=fit;
 const chooseExportFolderBtn=$('#chooseExportFolder');
