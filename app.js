@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
@@ -40,7 +39,23 @@ function makeVoxelGeometry(size){
   const amount=enabled?Math.max(0,Math.min(.45,+($('#rounding')?.value||0))):0;
   if(amount<=.001)return new THREE.BoxGeometry(size,size,size);
   const radius=Math.min(.49,amount);
-  const geo=new RoundedBoxGeometry(1,1,1,2,radius);
+  const shape=new THREE.Shape();
+  const h=.5,r=radius;
+  shape.moveTo(-h+r,-h);
+  shape.lineTo(h-r,-h); shape.quadraticCurveTo(h,-h,h,-h+r);
+  shape.lineTo(h,h-r); shape.quadraticCurveTo(h,h,h-r,h);
+  shape.lineTo(-h+r,h); shape.quadraticCurveTo(-h,h,-h,h-r);
+  shape.lineTo(-h,-h+r); shape.quadraticCurveTo(-h,-h,-h+r,-h);
+  const geo=new THREE.ExtrudeGeometry(shape,{
+    depth:1-2*r,
+    bevelEnabled:true,
+    bevelSegments:1,
+    steps:1,
+    bevelSize:r,
+    bevelThickness:r,
+    curveSegments:1
+  });
+  geo.translate(0,0,-(1-2*r)/2);
   geo.scale(size,size,size);
   geo.computeVertexNormals();
   return geo;
