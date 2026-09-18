@@ -392,6 +392,38 @@ function hashVoxel(p,step){
 function getDepthLayerCount(){
   return Math.max(1,Math.min(32,+($('#layerCount')?.value||4)|0));
 }
+function separateInnerLayers(){
+  if(!voxelMesh||!voxelPositions.length)return;
+  const step=+$('#voxel').value,layerCount=getDepthLayerCount();
+  const coord=p=>[Math.round(p.x/step),Math.round(p.y/step),Math.round(p.z/step)];
+  const keyXYZ=(x,y,z)=>x+','+y+','+z;
+  const coords=voxelPositions.map(coord);
+  let remaining=new Set(voxelPositions.map((_,i)=>i));
+  voxelLayers=new Array(voxelPositions.length).fill(layerCount-1);
+  const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+
+  for(let depth=0;depth<layerCount-1&&remaining.size;depth++){
+    const occupied=new Set();
+    for(const i of remaining){const c=coords[i];occupied.add(keyXYZ(c[0],c[1],c[2]));}
+    const shell=[];
+    for(const i of remaining){
+      const c=coords[i];
+      // A voxel belongs to this shell only if it touches the outside of the CURRENT
+      // remaining volume. Removing this shell first guarantees D1/D2 stay inside D0.
+      let exposed=false;
+      for(const d of dirs){
+        if(!occupied.has(keyXYZ(c[0]+d[0],c[1]+d[1],c[2]+d[2]))){exposed=true;break;}
+      }
+      if(exposed)shell.push(i);
+    }
+    if(!shell.length)break;
+    for(const i of shell){voxelLayers[i]=depth;remaining.delete(i);}
+  }
+  for(const i of remaining)voxelLayers[i]=layerCount-1;
+  updateLayerButtons();
+  showLayer('all');
+  $('#status').textContent='Inner layers: '+layerCount+' concentric depth layers.';
+}
 function autoSeparateLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
   const step=+$('#voxel').value,random=(+$('#layerRandom').value||0)/100,layerCount=getDepthLayerCount();
@@ -535,11 +567,7 @@ if($('#layerCount'))$('#layerCount').onchange=()=>{
   $('#layerCount').value=getDepthLayerCount();
   if(voxelMesh&&voxelPositions.length)autoSeparateLayers();
 };
-if($('#matchColorLayers'))$('#matchColorLayers').onclick=()=>{
-  const colors=new Set(voxelColors.map(c=>(validHex(c)||String(c||'').toUpperCase())));
-  $('#layerCount').value=Math.max(1,Math.min(32,colors.size||4));
-  if(voxelMesh&&voxelPositions.length)autoSeparateLayers();
-};
+if($('#innerLayers'))$('#innerLayers').onclick=separateInnerLayers;
 
 $('#depthFillList')?.addEventListener('click',e=>{
   const b=e.target.closest('[data-depth-fill-action]');
