@@ -117,6 +117,18 @@ function snapCameraView(view){
     right:new THREE.Vector3(1,0,0),
     top:new THREE.Vector3(0,1,0)
   };
+  if(view==='perspective'){
+    const v=new THREE.Vector3(1,0.8,1).normalize();
+    camera.position.copy(target).addScaledVector(v,distance);
+    camera.up.set(0,1,0);
+    camera.lookAt(target);
+    controls.target.copy(target);
+    controls.enabled=true;
+    controls.update();
+    document.querySelectorAll('#viewCube [data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+    $('#status').textContent='3D Perspective: free orbit enabled.';
+    return;
+  }
   const dir=dirs[view];
   if(!dir)return;
   camera.position.copy(target).addScaledVector(dir,distance);
