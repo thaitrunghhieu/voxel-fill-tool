@@ -395,32 +395,47 @@ function getDepthLayerCount(){
 function separateInnerLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
   const layerCount=getDepthLayerCount(),step=+$('#voxel').value;
-  const box=new THREE.Box3();
-  for(const p of voxelPositions)box.expandByPoint(p);
-  const size=new THREE.Vector3();box.getSize(size);
-  const center=new THREE.Vector3();box.getCenter(center);
-  const half=new THREE.Vector3(size.x*.5,size.y*.5,size.z*.5);
-  const eps=1e-6;
+  const key=(x,y,z)=>x+','+y+','+z;
+  const coords=voxelPositions.map(p=>[
+    Math.round(p.x/step),Math.round(p.y/step),Math.round(p.z/step)
+  ]);
+  const occupied=new Set(coords.map(c=>key(c[0],c[1],c[2])));
+  const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+
+  // Exact voxel depth from the ORIGINAL model surface.
+  // D0 = every exposed voxel and is never modified.
+  let frontier=[];
+  const depth=new Int32Array(voxelPositions.length);depth.fill(-1);
+  for(let i=0;i<coords.length;i++){
+    const c=coords[i];
+    let exposed=false;
+    for(const d of dirs){
+      if(!occupied.has(key(c[0]+d[0],c[1]+d[1],c[2]+d[2]))){exposed=true;break;}
+    }
+    if(exposed){depth[i]=0;frontier.push(i);}
+  }
+  // BFS inward gives a real shell-distance field that follows the model shape.
+  const indexByKey=new Map(coords.map((c,i)=>[key(c[0],c[1],c[2]),i]));
+  let head=0;
+  while(head<frontier.length){
+    const i=frontier[head++],c=coords[i],nd=depth[i]+1;
+    for(const d of dirs){
+      const j=indexByKey.get(key(c[0]+d[0],c[1]+d[1],c[2]+d[2]));
+      if(j!==undefined&&depth[j]===-1){depth[j]=nd;frontier.push(j);}
+    }
+  }
 
   voxelLayers=new Array(voxelPositions.length).fill(0);
   for(let i=0;i<voxelPositions.length;i++){
+    if(depth[i]<=0){voxelLayers[i]=0;continue;} // D0 stays 100% unchanged.
+
+    // Strong, visible stepped border for D1+ (about +/- one voxel).
+    // Quantized deterministic noise makes neighboring inner colors poke into each
+    // other, while D0 can never be crossed.
     const p=voxelPositions[i];
-    const nx=half.x>eps?Math.abs(p.x-center.x)/half.x:0;
-    const ny=half.y>eps?Math.abs(p.y-center.y)/half.y:0;
-    const nz=half.z>eps?Math.abs(p.z-center.z)/half.z:0;
-    const r=Math.max(nx,ny,nz);
-    const inward=(1-Math.min(1,r))*layerCount;
-
-    // D0 is intentionally untouched: a clean, stable outside band.
-    if(inward<1){voxelLayers[i]=0;continue;}
-
-    // Only D1+ boundaries are roughened. Two hashes make small voxel-sized
-    // steps instead of a smooth/noisy gradient. The value never creates voxels
-    // outside the original filled model.
     const h=hashVoxel(p,step);
-    const h2=hashVoxel(new THREE.Vector3(p.z,p.x,p.y),step);
-    const jitter=((h+h2)*.5-.5)*1.15;
-    let d=Math.floor(inward+jitter);
+    let offset=h<.30?-1:(h>.70?1:0);
+    let d=depth[i]+offset;
     d=Math.max(1,Math.min(layerCount-1,d));
     voxelLayers[i]=d;
   }
@@ -429,7 +444,7 @@ function separateInnerLayers(){
   showLayer('all');
   const counts=new Array(layerCount).fill(0);
   for(const d of voxelLayers)counts[d]++;
-  $('#status').textContent='Jagged inner layers: D0 clean · D1–D'+(layerCount-1)+' uneven inward borders.';
+  $('#status').textContent='Inner jagged layers applied · D0 fixed · D1+ ±1 voxel border.';
 }
 function autoSeparateLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
