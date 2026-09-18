@@ -23,3 +23,5 @@
 .num-unit i{margin-left:0}
 
 .normal-preview-row{display:flex;align-items:center;gap:9px;margin-top:8px;font-size:10px;color:#999;line-height:1.35}.normal-preview-row canvas{width:52px;height:52px;border:1px solid #444;border-radius:4px;image-rendering:auto;background:#8080ff}
+
+.layer-box{margin:12px 0;padding:10px;border:1px solid #333;border-radius:7px;background:#151515}.layer-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.layer-head button{width:auto;padding:6px 8px;font-size:10px}.layer-buttons{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px}.layer-buttons button{padding:6px 7px;text-align:left;font-size:11px}.layer-buttons button:first-child{grid-column:1/-1}.layer-buttons button.active{outline:1px solid #168cff;background:#183047}
