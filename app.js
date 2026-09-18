@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {toCreasedNormals} from 'three/addons/utils/BufferGeometryUtils.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {OBJLoader} from 'three/addons/loaders/OBJLoader.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
@@ -41,9 +42,13 @@ function makeVoxelGeometry(size){
   if(amount<=.001)return new THREE.BoxGeometry(size,size,size);
   const radius=Math.min(.49,amount);
   // Minimum rounded topology: a single bevel segment. This matches the user's low-tris reference.
-  const geo=new RoundedBoxGeometry(1,1,1,1,radius);
+  let geo=new RoundedBoxGeometry(1,1,1,1,radius);
   geo.scale(size,size,size);
-  geo.computeVertexNormals();
+  // Low-poly bevel + weighted-style normals: keep the large cube faces visually flat
+  // while smoothing the single bevel band. No extra geometry or texture memory.
+  geo=toCreasedNormals(geo,Math.PI/3);
+  geo.computeBoundingBox();
+  geo.computeBoundingSphere();
   return geo;
 }
 async function voxelize(){if(!modelRoot)return;$('#voxelize').disabled=true;$('#export').disabled=true;$('#status').textContent='Calculating voxels…';await new Promise(r=>setTimeout(r,30));modelRoot.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(modelRoot),step=+$('#voxel').value,scale=+$('#cubeScale').value,mode=$('#mode').value;const size=box.getSize(new THREE.Vector3()), nx=Math.ceil(size.x/step),ny=Math.ceil(size.y/step),nz=Math.ceil(size.z/step),total=nx*ny*nz;if(total>1200000){$('#status').textContent=`Grid too dense (${total.toLocaleString()} cells). Increase voxel size.`;$('#voxelize').disabled=false;return}const positions=[];let n=0;for(let ix=0;ix<nx;ix++){const x=box.min.x+(ix+.5)*step;for(let iy=0;iy<ny;iy++){const y=box.min.y+(iy+.5)*step;for(let iz=0;iz<nz;iz++){const z=box.min.z+(iz+.5)*step,p=new THREE.Vector3(x,y,z);if(mode==='solid'?pointInside(p):nearSurface(p,step*.7))positions.push(p);n++}if(iy%5===0){$('#status').textContent=`Calculating… ${Math.round(n/total*100)}%`;await new Promise(r=>setTimeout(r,0))}}}
