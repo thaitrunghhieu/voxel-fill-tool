@@ -395,6 +395,18 @@ function updateLayerButtons(){
   const counts=[0,0,0,0];for(const d of voxelLayers)counts[Math.max(0,Math.min(3,d||0))]++;
   $('#layerButtons').querySelectorAll('[data-layer]').forEach(b=>{if(b.dataset.layer!=='all'){const d=+b.dataset.layer;b.textContent='D'+d+'('+counts[d]+')'}});
 }
+
+function fillSelectedLayer(){
+  if(!voxelMesh||activeLayerView==='all'){$('#status').textContent='Select D0, D1, D2 or D3 first.';return}
+  const layer=+activeLayerView,col=new THREE.Color(customColor);let count=0;
+  for(let i=0;i<voxelPositions.length;i++){
+    if(voxelLayers[i]!==layer)continue;
+    voxelMesh.setColorAt(i,col);voxelColors[i]=customColor;voxelShadows[i]=customShadow;count++;
+  }
+  if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true;
+  $('#status').textContent='Filled D'+layer+' · '+count.toLocaleString()+' voxels';
+}
+
 function showLayer(which){
   if(!voxelMesh)return;activeLayerView=which;
   const dummy=new THREE.Object3D();
@@ -460,3 +472,5 @@ if($('#normalBevelEnabled'))$('#normalBevelEnabled').onchange=()=>{applyVoxelMat
 if($('#autoLayers'))$('#autoLayers').onclick=autoSeparateLayers;
 if($('#layerRandom')){$('#layerRandom').oninput=e=>{$('#layerRandomOut').value=e.target.value};$('#layerRandomOut').oninput=e=>{const v=Math.max(0,Math.min(100,+e.target.value||0));e.target.value=v;$('#layerRandom').value=v}}
 $('#layerButtons')?.addEventListener('click',e=>{const b=e.target.closest('[data-layer]');if(b)showLayer(b.dataset.layer)});
+
+if($('#fillLayerColor'))$('#fillLayerColor').onclick=fillSelectedLayer;
