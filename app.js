@@ -147,6 +147,7 @@ function rebuildColorLayers(){
     groups.set(c,groups.get(c)+1);
   }
   list.innerHTML='';
+  if(activeColorLayer!=='all'&&!groups.has(activeColorLayer))activeColorLayer='all';
   let n=1;
   for(const [color,count] of groups){
     const b=document.createElement('button');
@@ -176,7 +177,7 @@ let mayaNav=false,navLastX=0,navLastY=0;
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('pointerdown',e=>{if(!paintEnabled)return;if(e.altKey&&e.button===0){e.preventDefault();painting=false;mayaNav=true;navLastX=e.clientX;navLastY=e.clientY;controls.enabled=false;canvas.setPointerCapture?.(e.pointerId);return}if(e.button===0){painting=true;controls.enabled=false;paintAt(e)}else{painting=false;controls.enabled=true}});
 canvas.addEventListener('pointermove',e=>{if(mayaNav){e.preventDefault();const dx=e.clientX-navLastX,dy=e.clientY-navLastY;navLastX=e.clientX;navLastY=e.clientY;const off=camera.position.clone().sub(controls.target),sph=new THREE.Spherical().setFromVector3(off);sph.theta-=dx*0.008;sph.phi-=dy*0.008;sph.phi=Math.max(0.01,Math.min(Math.PI-0.01,sph.phi));off.setFromSpherical(sph);camera.position.copy(controls.target).add(off);camera.lookAt(controls.target);return}if(painting&&(e.buttons&1))paintAt(e)});
-addEventListener('pointerup',()=>{painting=false;mayaNav=false;controls.enabled=true});
+addEventListener('pointerup',()=>{const wasPainting=painting;painting=false;mayaNav=false;controls.enabled=true;if(wasPainting)rebuildColorLayers()});
 $('#paintMode').onchange=e=>{paintEnabled=e.target.checked;canvas.style.cursor=paintEnabled?'crosshair':'grab';$('#status').textContent=paintEnabled?'Paint: Left drag. Rotate: Middle drag or Alt+Left. Pan: Right drag. Wheel: Zoom.':'Paint mode off.'};
 $('#brushSize').oninput=e=>$('#brushOut').value=e.target.value;
 $('#paintThrough').onchange=e=>{paintThrough=e.target.checked;$('#paintThroughControls').classList.toggle('disabled',!paintThrough);$('#status').textContent=paintThrough?'Paint Through: brush paints from the visible hit into interior voxels along the camera ray.':'Paint Through off.'};
@@ -469,7 +470,6 @@ function fillLayer(layer,colorHex){
     voxelMesh.instanceColor.updateRange.count=-1;
   }
   voxelMesh.material.needsUpdate=true;
-  rebuildColorLayers();
   return count;
 }
 
@@ -563,6 +563,7 @@ $('#depthFillList')?.addEventListener('click',e=>{
   const d=Number(b.dataset.depthFillAction);
   const input=document.querySelector('[data-depth-fill-color="'+d+'"]');
   const count=fillLayer(d,input?.value||customColor);
+  rebuildColorLayers();
   // Keep the current depth isolation, but refresh matrices so the filled color is immediately visible.
   showLayer(activeLayerView);
   $('#status').textContent='Filled D'+d+' · '+count.toLocaleString()+' voxels';
@@ -573,6 +574,7 @@ if($('#fillAllDepthLayers'))$('#fillAllDepthLayers').onclick=()=>{
     const input=document.querySelector('[data-depth-fill-color="'+d+'"]');
     total+=fillLayer(d,input?.value||customColor);
   }
+  rebuildColorLayers();
   showLayer(activeLayerView);
   $('#status').textContent='Filled D0–D'+(n-1)+' · '+total.toLocaleString()+' voxels';
 };
