@@ -437,6 +437,18 @@ function updateLayerButtons(){
     const b=document.createElement('button');b.type='button';b.dataset.layer=String(d);
     b.textContent='D'+d+'('+counts[d]+')';el.appendChild(b);
   }
+  const fills=$('#depthFillList');
+  if(fills){
+    const defaults=['#FFC845','#FF952A','#FF5940','#875530','#58D65A','#45C9FF','#C18DFF','#FF6490'];
+    const previous=[...fills.querySelectorAll('[data-depth-fill-color]')].map(x=>x.value);
+    fills.innerHTML='';
+    for(let d=0;d<layerCount;d++){
+      const row=document.createElement('div');row.className='depth-fill-row';
+      const color=previous[d]||defaults[d%defaults.length];
+      row.innerHTML='<b>D'+d+'</b><input type="color" data-depth-fill-color="'+d+'" value="'+color+'"><button type="button" data-depth-fill-action="'+d+'">FILL</button>';
+      fills.appendChild(row);
+    }
+  }
 }
 function fillLayer(layer,colorHex){
   if(!voxelMesh||!voxelPositions.length)return 0;
