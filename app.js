@@ -399,69 +399,64 @@ function separateInnerLayers(){
   const coords=voxelPositions.map(p=>[
     Math.round(p.x/step),Math.round(p.y/step),Math.round(p.z/step)
   ]);
-  const occupied=new Set(coords.map(c=>key(c[0],c[1],c[2])));
+  const indexByKey=new Map(coords.map((c,i)=>[key(c[0],c[1],c[2]),i]));
+  const occupied=new Set(indexByKey.keys());
   const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
 
-  // Exact voxel depth from the ORIGINAL model surface.
-  // D0 = every exposed voxel and is never modified.
-  let frontier=[];
+  // True voxel distance from the model exterior.
   const depth=new Int32Array(voxelPositions.length);depth.fill(-1);
+  const queue=[];
   for(let i=0;i<coords.length;i++){
-    const c=coords[i];
-    let exposed=false;
+    const c=coords[i];let exposed=false;
     for(const d of dirs){
       if(!occupied.has(key(c[0]+d[0],c[1]+d[1],c[2]+d[2]))){exposed=true;break;}
     }
-    if(exposed){depth[i]=0;frontier.push(i);}
+    if(exposed){depth[i]=0;queue.push(i);}
   }
-  // BFS inward gives a real shell-distance field that follows the model shape.
-  const indexByKey=new Map(coords.map((c,i)=>[key(c[0],c[1],c[2]),i]));
-  let head=0;
-  while(head<frontier.length){
-    const i=frontier[head++],c=coords[i],nd=depth[i]+1;
+  for(let head=0;head<queue.length;head++){
+    const i=queue[head],c=coords[i],nd=depth[i]+1;
     for(const d of dirs){
       const j=indexByKey.get(key(c[0]+d[0],c[1]+d[1],c[2]+d[2]));
-      if(j!==undefined&&depth[j]===-1){depth[j]=nd;frontier.push(j);}
+      if(j!==undefined&&depth[j]===-1){depth[j]=nd;queue.push(j);}
     }
   }
 
+  let maxDepth=0;
+  for(const d of depth)if(d>maxDepth)maxDepth=d;
+  const band=Math.max(1,(maxDepth+1)/layerCount);
   voxelLayers=new Array(voxelPositions.length).fill(0);
+
   for(let i=0;i<voxelPositions.length;i++){
-    if(depth[i]<=0){voxelLayers[i]=0;continue;} // D0 stays 100% unchanged.
+    const dep=Math.max(0,depth[i]);
+    if(dep===0){voxelLayers[i]=0;continue;} // visible outside is ALWAYS D0.
 
-    // Strong, visible stepped border for D1+ (about +/- one voxel).
-    // Quantized deterministic noise makes neighboring inner colors poke into each
-    // other, while D0 can never be crossed.
     const p=voxelPositions[i];
-    const h=hashVoxel(p,step);
+    const h1=hashVoxel(p,step);
     const h2=hashVoxel(new THREE.Vector3(p.y,p.z,p.x),step);
-    let d=depth[i];
+    const h3=hashVoxel(new THREE.Vector3(p.z,p.x,p.y),step);
 
-    // Exterior surface (depth 0) was already locked to D0 above.
-    // D1 now interlocks directly against the inside of that D0 skin:
-    // some first-inner voxels stay D1, some recede to D2; selected second-inner
-    // voxels become D1 protrusions. Because exposed voxels are always D0, the
-    // outside of the model remains one solid D0 color.
-    if(depth[i]===1){
-      if(layerCount>2 && h<.38)d=2;
-      else d=1;
-    }else if(depth[i]===2){
-      if(h2<.48)d=1;
-      else d=Math.min(2,layerCount-1);
-    }else{
-      let offset=h<.28?-1:(h>.72?1:0);
-      d=depth[i]+offset;
+    // Base concentric band + strong blocky boundary displacement.
+    // The D0/D1 boundary itself moves inward/outward by roughly one voxel,
+    // while depth 0 remains locked to D0, so the outside stays one color.
+    const jitter=((h1+h2+h3)/3-.5)*2.4;
+    const shifted=Math.max(0,dep+jitter);
+    let layer=Math.floor(shifted/band);
+    layer=Math.max(0,Math.min(layerCount-1,layer));
+
+    // Guarantee some obvious D1 teeth immediately behind the D0 skin.
+    // This is the part missing in the previous version.
+    if(layerCount>1 && dep===1){
+      if(h1>.42)layer=1;
+      else layer=0;
     }
-
-    d=Math.max(1,Math.min(layerCount-1,d));
-    voxelLayers[i]=d;
+    voxelLayers[i]=layer;
   }
 
   updateLayerButtons();
   showLayer('all');
   const counts=new Array(layerCount).fill(0);
   for(const d of voxelLayers)counts[d]++;
-  $('#status').textContent='Inner jagged layers · exterior locked D0 · D1 interlocks directly behind D0.';
+  $('#status').textContent='Jagged nested layers · D0 exterior locked · D0/D1 boundary visibly stepped.';
 }
 function autoSeparateLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
