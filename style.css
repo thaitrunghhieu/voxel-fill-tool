@@ -52,3 +52,27 @@
 .layer-count-control{display:grid;grid-template-columns:1fr auto;align-items:end;gap:6px}
 .layer-count-control>div{grid-column:1/-1}
 .layer-count-control button{width:auto;padding:6px 7px;font-size:9px}
+
+/* Floating viewport tools */
+.view-cube{
+  left:14px!important;right:auto!important;top:14px!important;
+  width:112px;z-index:22
+}
+.color-layers{
+  left:auto!important;right:14px!important;top:14px!important;
+  width:128px;padding:9px;border-radius:9px
+}
+.color-layers>b{
+  font-size:10px;letter-spacing:.35px;margin:0 0 7px 2px;opacity:.85
+}
+.color-layers>button[data-color-layer="all"]{
+  justify-content:center;margin-bottom:7px;font-weight:700
+}
+#colorLayerList{max-height:280px;padding-right:2px}
+#colorLayerList button{
+  display:grid;grid-template-columns:14px 1fr auto;
+  align-items:center;gap:7px;margin-bottom:5px;
+  min-height:30px;border-radius:7px;text-align:left
+}
+#colorLayerList .color-dot{width:13px;height:13px;border-radius:4px}
+#colorLayerList small{font-size:9px;opacity:.7}
