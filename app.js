@@ -438,6 +438,25 @@ function separateInnerLayers(){
     voxelLayers[i]=Math.max(0,Math.min(layerCount-1,d));
   }
 
+  // If the deepest requested layer is tiny, borrow a small deterministic
+  // portion from the previous layer so it forms a visible core instead of 1 voxel.
+  if(layerCount>1){
+    const last=layerCount-1,prev=last-1;
+    let counts=new Array(layerCount).fill(0);
+    for(const d of voxelLayers)counts[d]++;
+    const target=Math.max(4,Math.ceil(voxelPositions.length*.025));
+    if(counts[last]<target && counts[prev]>target){
+      const candidates=[];
+      for(let i=0;i<voxelLayers.length;i++)if(voxelLayers[i]===prev){
+        candidates.push([Math.max(0,depth[i]),hashVoxel(voxelPositions[i],step),i]);
+      }
+      // Prefer the deepest D2 voxels first, then deterministic hash for a natural edge.
+      candidates.sort((a,b)=>b[0]-a[0]||a[1]-b[1]);
+      const need=Math.min(target-counts[last],Math.max(0,counts[prev]-target));
+      for(let n=0;n<need&&n<candidates.length;n++)voxelLayers[candidates[n][2]]=last;
+    }
+  }
+
   updateLayerButtons();showLayer('all');
   const counts=new Array(layerCount).fill(0);for(const d of voxelLayers)counts[d]++;
   $('#status').textContent='INNER JAGGED: '+counts.map((n,i)=>'D'+i+'='+n).join(' · ');
