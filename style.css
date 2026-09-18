@@ -13,3 +13,6 @@
 .view-cube button{min-width:34px;height:30px;padding:0 6px;border:1px solid #555;border-radius:5px;background:#292929;color:#bbb;font-size:9px;font-weight:700;cursor:pointer}
 .view-cube button:hover{background:#3a3a3a;color:#fff}
 .view-cube button.active{border-color:#aaa;background:#555;color:#fff}
+
+.num-edit{-moz-appearance:textfield;appearance:textfield}
+.num-edit::-webkit-outer-spin-button,.num-edit::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;display:none}
