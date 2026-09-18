@@ -36,7 +36,25 @@ function pointInside(p){let hits=[];for(const m of meshes){raycaster.set(p,dir);
 function nearSurface(p,half){const dirs=[new THREE.Vector3(1,0,0),new THREE.Vector3(-1,0,0),new THREE.Vector3(0,1,0),new THREE.Vector3(0,-1,0),new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,-1)];for(const d of dirs){raycaster.set(p,d);raycaster.far=half*1.05;for(const m of meshes)if(raycaster.intersectObject(m,false).length)return true}return false}
 async function voxelize(){if(!modelRoot)return;$('#voxelize').disabled=true;$('#export').disabled=true;$('#status').textContent='Calculating voxels…';await new Promise(r=>setTimeout(r,30));modelRoot.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(modelRoot),step=+$('#voxel').value,scale=+$('#cubeScale').value,mode=$('#mode').value;const size=box.getSize(new THREE.Vector3()), nx=Math.ceil(size.x/step),ny=Math.ceil(size.y/step),nz=Math.ceil(size.z/step),total=nx*ny*nz;if(total>1200000){$('#status').textContent=`Grid too dense (${total.toLocaleString()} cells). Increase voxel size.`;$('#voxelize').disabled=false;return}const positions=[];let n=0;for(let ix=0;ix<nx;ix++){const x=box.min.x+(ix+.5)*step;for(let iy=0;iy<ny;iy++){const y=box.min.y+(iy+.5)*step;for(let iz=0;iz<nz;iz++){const z=box.min.z+(iz+.5)*step,p=new THREE.Vector3(x,y,z);if(mode==='solid'?pointInside(p):nearSurface(p,step*.7))positions.push(p);n++}if(iy%5===0){$('#status').textContent=`Calculating… ${Math.round(n/total*100)}%`;await new Promise(r=>setTimeout(r,0))}}}
 disposeObj(voxelMesh);const geo=new THREE.BoxGeometry(step*scale,step*scale,step*scale),mat=new THREE.MeshStandardMaterial({color:customColor,emissive:customShadow,emissiveIntensity:.16,roughness:.75});voxelMesh=new THREE.InstancedMesh(geo,mat,positions.length);voxelPositions=positions.map(p=>p.clone());voxelColors=positions.map(()=>customColor);const dummy=new THREE.Object3D(),baseCol=new THREE.Color(customColor);positions.forEach((p,i)=>{dummy.position.copy(p);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix);voxelMesh.setColorAt(i,baseCol)});voxelMesh.instanceMatrix.needsUpdate=true;if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true;scene.add(voxelMesh);if(sliceEnabled)updateSlice();$('#stats').textContent=`${sourceName} · ${positions.length.toLocaleString()} voxels · grid ${nx}×${ny}×${nz}`;$('#status').textContent='Done.';$('#voxelize').disabled=false;$('#export').disabled=positions.length===0}
-async function downloadBlob(blob,name){
+async function saveExportBlob(blob,name){
+  const ext=(name.split('.').pop()||'').toLowerCase();
+  const mime=ext==='fbx'?'application/octet-stream':ext==='glb'?'model/gltf-binary':'application/octet-stream';
+  if('showSaveFilePicker' in window){
+    try{
+      const handle=await window.showSaveFilePicker({
+        suggestedName:name,
+        types:[{description:ext.toUpperCase()+' file',accept:{[mime]:['.'+ext]}}]
+      });
+      const writable=await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      $('#status').textContent='Saved: '+handle.name;
+      return true;
+    }catch(e){
+      if(e?.name==='AbortError'){ $('#status').textContent='Export cancelled.'; return false; }
+      console.warn('Save picker failed, trying folder/download fallback.',e);
+    }
+  }
   if(exportDirectoryHandle){
     try{
       const permission=await exportDirectoryHandle.requestPermission({mode:'readwrite'});
@@ -46,16 +64,21 @@ async function downloadBlob(blob,name){
         await writable.write(blob);
         await writable.close();
         $('#status').textContent='Saved to '+exportDirectoryHandle.name+'/'+name;
-        return;
+        return true;
       }
     }catch(e){console.warn('Folder save failed, using browser download.',e)}
   }
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download=name;
+  document.body.appendChild(a);
   a.click();
+  a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  $('#status').textContent='Downloaded '+name;
+  return true;
 }
+async function downloadBlob(blob,name){return saveExportBlob(blob,name)}
 async function exportGLB(){if(!voxelMesh)return;$('#status').textContent='Exporting GLB…';const group=new THREE.Group();group.add(voxelMesh.clone());new GLTFExporter().parse(group,res=>{const blob=new Blob([res],{type:'model/gltf-binary'});downloadBlob(blob,`${sourceName}_voxels.glb`);$('#status').textContent='Exported GLB.'},e=>{$('#status').textContent='Export failed.';console.error(e)},{binary:true,onlyVisible:true})}
 function applyVoxelMaterial(){if(!voxelMesh)return;voxelMesh.material.color.set(0xffffff);voxelMesh.material.emissive.set(customShadow);voxelMesh.material.transparent=xrayEnabled;voxelMesh.material.opacity=xrayEnabled?(+$('#xrayOpacity').value/100):1;voxelMesh.material.depthWrite=!xrayEnabled;voxelMesh.material.needsUpdate=true}
 function syncMatEditor(){const c=$('#colorPicker'),s=$('#shadowPicker'),ct=$('#colorHex'),st=$('#shadowHex');if(!c)return;c.value=customColor;s.value=customShadow;ct.value=customColor.toUpperCase();st.value=customShadow.toUpperCase()}
@@ -70,6 +93,7 @@ function updateSlice(){if(!voxelMesh)return;const axis=$('#sliceAxis').value,dir
 function resetSliceMatrices(){if(!voxelMesh)return;const dummy=new THREE.Object3D();for(let i=0;i<voxelPositions.length;i++){dummy.position.copy(voxelPositions[i]);dummy.quaternion.identity();dummy.scale.set(1,1,1);dummy.updateMatrix();voxelMesh.setMatrixAt(i,dummy.matrix)}voxelMesh.instanceMatrix.needsUpdate=true}
 function paintAt(ev){if(!paintEnabled||!voxelMesh)return;const rect=canvas.getBoundingClientRect();mouse.x=((ev.clientX-rect.left)/rect.width)*2-1;mouse.y=-((ev.clientY-rect.top)/rect.height)*2+1;paintRay.setFromCamera(mouse,camera);const hits=paintRay.intersectObject(voxelMesh,false);if(!hits.length)return;const first=hits.find(h=>h.instanceId!=null);if(!first)return;const radius=Math.max(0,+$('#brushSize').value|0),step=+$('#voxel').value,col=new THREE.Color(customColor),ids=new Set();if(paintThrough){const ray=paintRay.ray,brushWorld=Math.max(step*.55,radius*step+step*.55),depthSlider=$('#paintDepth'),depthValue=+depthSlider.value|0,maxDepth=depthValue>=+depthSlider.max?0:depthValue*step;const originT=ray.direction.dot(voxelPositions[first.instanceId].clone().sub(ray.origin));for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i],v=p.clone().sub(ray.origin),t=v.dot(ray.direction);if(t<originT-step*.6)continue;if(maxDepth>0&&t>originT+maxDepth+step*.6)continue;const closest=ray.origin.clone().addScaledVector(ray.direction,t);if(p.distanceTo(closest)<=brushWorld)ids.add(i)}}else{const center=voxelPositions[first.instanceId];for(let i=0;i<voxelPositions.length;i++){const p=voxelPositions[i];if(Math.abs(p.x-center.x)<=radius*step+.001&&Math.abs(p.y-center.y)<=radius*step+.001&&Math.abs(p.z-center.z)<=radius*step+.001)ids.add(i)}}for(const i of ids){voxelMesh.setColorAt(i,col);voxelColors[i]=customColor}if(voxelMesh.instanceColor)voxelMesh.instanceColor.needsUpdate=true}
 let mayaNav=false,navLastX=0,navLastY=0;
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('pointerdown',e=>{if(!paintEnabled)return;if(e.altKey&&e.button===0){e.preventDefault();painting=false;mayaNav=true;navLastX=e.clientX;navLastY=e.clientY;controls.enabled=false;canvas.setPointerCapture?.(e.pointerId);return}if(e.button===0){painting=true;controls.enabled=false;paintAt(e)}else{painting=false;controls.enabled=true}});
 canvas.addEventListener('pointermove',e=>{if(mayaNav){e.preventDefault();const dx=e.clientX-navLastX,dy=e.clientY-navLastY;navLastX=e.clientX;navLastY=e.clientY;const off=camera.position.clone().sub(controls.target),sph=new THREE.Spherical().setFromVector3(off);sph.theta-=dx*0.008;sph.phi-=dy*0.008;sph.phi=Math.max(0.01,Math.min(Math.PI-0.01,sph.phi));off.setFromSpherical(sph);camera.position.copy(controls.target).add(off);camera.lookAt(controls.target);return}if(painting&&(e.buttons&1))paintAt(e)});
 addEventListener('pointerup',()=>{painting=false;mayaNav=false;controls.enabled=true});
