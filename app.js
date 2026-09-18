@@ -36,6 +36,23 @@ modelRoot.traverse(o=>{if(o.isMesh){o.material=o.material?.clone?.()||new THREE.
 function applyOriginal(){if(!modelRoot)return;modelRoot.visible=$('#original').checked;meshes.forEach(m=>m.material.wireframe=$('#wire').checked)}
 function pointInside(p){let hits=[];for(const m of meshes){raycaster.set(p,dir);hits.push(...raycaster.intersectObject(m,false))}hits.sort((a,b)=>a.distance-b.distance);let unique=0,last=-Infinity;for(const h of hits){if(h.distance-last>1e-5){unique++;last=h.distance}}return unique%2===1}
 function nearSurface(p,half){const dirs=[new THREE.Vector3(1,0,0),new THREE.Vector3(-1,0,0),new THREE.Vector3(0,1,0),new THREE.Vector3(0,-1,0),new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,-1)];for(const d of dirs){raycaster.set(p,d);raycaster.far=half*1.05;for(const m of meshes)if(raycaster.intersectObject(m,false).length)return true}return false}
+function makeBevelNormalMap(){
+  const n=64,data=new Uint8Array(n*n*4),edge=.18;
+  for(let y=0;y<n;y++)for(let x=0;x<n;x++){
+    const u=(x+.5)/n,v=(y+.5)/n;
+    const dx=Math.min(u,1-u),dy=Math.min(v,1-v);
+    let nx=0,ny=0,nz=1;
+    if(dx<edge)nx=(u<.5?1:-1)*(1-dx/edge)*.62;
+    if(dy<edge)ny=(v<.5?1:-1)*(1-dy/edge)*.62;
+    nz=Math.sqrt(Math.max(.05,1-nx*nx-ny*ny));
+    const l=Math.hypot(nx,ny,nz)||1;nx/=l;ny/=l;nz/=l;
+    const i=(y*n+x)*4;data[i]=(nx*.5+.5)*255;data[i+1]=(ny*.5+.5)*255;data[i+2]=(nz*.5+.5)*255;data[i+3]=255;
+  }
+  const tex=new THREE.DataTexture(data,n,n,THREE.RGBAFormat);
+  tex.wrapS=tex.wrapT=THREE.ClampToEdgeWrapping;tex.colorSpace=THREE.NoColorSpace;tex.needsUpdate=true;
+  return tex;
+}
+const bevelNormalMap=makeBevelNormalMap();
 function makeVoxelGeometry(size){
   const enabled=$('#roundingEnabled')?.checked!==false;
   const amount=enabled?Math.max(0,Math.min(.45,+($('#rounding')?.value||0))):0;
@@ -94,7 +111,7 @@ async function saveExportBlob(blob,name){
 }
 async function downloadBlob(blob,name){return saveExportBlob(blob,name)}
 async function exportGLB(){if(!voxelMesh)return;$('#status').textContent='Exporting GLB…';const group=new THREE.Group();group.add(voxelMesh.clone());new GLTFExporter().parse(group,async res=>{const blob=new Blob([res],{type:'model/gltf-binary'});await downloadBlob(blob,`${sourceName}_voxels.glb`)},e=>{$('#status').textContent='Export failed.';console.error(e)},{binary:true,onlyVisible:true})}
-function applyVoxelMaterial(){if(!voxelMesh)return;voxelMesh.material.color.set(0xffffff);voxelMesh.material.emissive.set(customShadow);voxelMesh.material.transparent=xrayEnabled;voxelMesh.material.opacity=xrayEnabled?(+$('#xrayOpacity').value/100):1;voxelMesh.material.depthWrite=!xrayEnabled;voxelMesh.material.needsUpdate=true}
+function applyVoxelMaterial(){if(!voxelMesh)return;voxelMesh.material.color.set(0xffffff);voxelMesh.material.emissive.set(customShadow);voxelMesh.material.normalMap=bevelNormalMap;voxelMesh.material.normalScale.set(.45,.45);voxelMesh.material.transparent=xrayEnabled;voxelMesh.material.opacity=xrayEnabled?(+$('#xrayOpacity').value/100):1;voxelMesh.material.depthWrite=!xrayEnabled;voxelMesh.material.needsUpdate=true}
 function syncMatEditor(){const c=$('#colorPicker'),s=$('#shadowPicker'),ct=$('#colorHex'),st=$('#shadowHex');if(!c)return;c.value=customColor;s.value=customShadow;ct.value=customColor.toUpperCase();st.value=customShadow.toUpperCase()}
 function validHex(v){v=v.trim();if(!v.startsWith('#'))v='#'+v;return /^#[0-9a-f]{6}$/i.test(v)?v.toUpperCase():null}
 function setCustom(which,value){const v=validHex(value);if(!v)return;if(which==='color')customColor=v;else customShadow=v;syncMatEditor();applyVoxelMaterial()}
