@@ -396,67 +396,51 @@ function separateInnerLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
   const layerCount=getDepthLayerCount(),step=+$('#voxel').value;
   const key=(x,y,z)=>x+','+y+','+z;
-  const coords=voxelPositions.map(p=>[
-    Math.round(p.x/step),Math.round(p.y/step),Math.round(p.z/step)
-  ]);
+  const coords=voxelPositions.map(p=>[Math.round(p.x/step),Math.round(p.y/step),Math.round(p.z/step)]);
   const indexByKey=new Map(coords.map((c,i)=>[key(c[0],c[1],c[2]),i]));
   const occupied=new Set(indexByKey.keys());
   const dirs=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
-
-  // True voxel distance from the model exterior.
   const depth=new Int32Array(voxelPositions.length);depth.fill(-1);
-  const queue=[];
+  const q=[];
   for(let i=0;i<coords.length;i++){
     const c=coords[i];let exposed=false;
-    for(const d of dirs){
-      if(!occupied.has(key(c[0]+d[0],c[1]+d[1],c[2]+d[2]))){exposed=true;break;}
-    }
-    if(exposed){depth[i]=0;queue.push(i);}
+    for(const d of dirs)if(!occupied.has(key(c[0]+d[0],c[1]+d[1],c[2]+d[2]))){exposed=true;break}
+    if(exposed){depth[i]=0;q.push(i)}
   }
-  for(let head=0;head<queue.length;head++){
-    const i=queue[head],c=coords[i],nd=depth[i]+1;
+  for(let h=0;h<q.length;h++){
+    const i=q[h],c=coords[i],nd=depth[i]+1;
     for(const d of dirs){
       const j=indexByKey.get(key(c[0]+d[0],c[1]+d[1],c[2]+d[2]));
-      if(j!==undefined&&depth[j]===-1){depth[j]=nd;queue.push(j);}
+      if(j!==undefined&&depth[j]<0){depth[j]=nd;q.push(j)}
     }
   }
 
-  let maxDepth=0;
-  for(const d of depth)if(d>maxDepth)maxDepth=d;
-  const band=Math.max(1,(maxDepth+1)/layerCount);
+  let maxDepth=0;for(const d of depth)maxDepth=Math.max(maxDepth,d);
+  // Use actual voxel-shell depth. Compress only when the model has more shells
+  // than requested layers; this prevents D1 disappearing on small/thin models.
+  const shellScale=Math.max(1,Math.ceil((maxDepth+1)/layerCount));
   voxelLayers=new Array(voxelPositions.length).fill(0);
 
   for(let i=0;i<voxelPositions.length;i++){
     const dep=Math.max(0,depth[i]);
-    if(dep===0){voxelLayers[i]=0;continue;} // visible outside is ALWAYS D0.
+    if(dep===0){voxelLayers[i]=0;continue;} // visible exterior stays D0 only
+    const p=voxelPositions[i],h=hashVoxel(p,step);
+    let d=Math.floor(dep/shellScale);
 
-    const p=voxelPositions[i];
-    const h1=hashVoxel(p,step);
-    const h2=hashVoxel(new THREE.Vector3(p.y,p.z,p.x),step);
-    const h3=hashVoxel(new THREE.Vector3(p.z,p.x,p.y),step);
+    // Explicit D0/D1 jagged interface:
+    // depth 1 alternates between D0 and D1, so D1 visibly pokes toward D0
+    // and recedes, while depth 0 remains a clean single-color outer skin.
+    if(dep===1)d=h<.50?0:1;
+    // depth 2 also alternates D1/D2 to keep the next border stepped.
+    else if(dep===2&&layerCount>2)d=h<.50?1:2;
+    else d=Math.max(1,d);
 
-    // Base concentric band + strong blocky boundary displacement.
-    // The D0/D1 boundary itself moves inward/outward by roughly one voxel,
-    // while depth 0 remains locked to D0, so the outside stays one color.
-    const jitter=((h1+h2+h3)/3-.5)*2.4;
-    const shifted=Math.max(0,dep+jitter);
-    let layer=Math.floor(shifted/band);
-    layer=Math.max(0,Math.min(layerCount-1,layer));
-
-    // Guarantee some obvious D1 teeth immediately behind the D0 skin.
-    // This is the part missing in the previous version.
-    if(layerCount>1 && dep===1){
-      if(h1>.42)layer=1;
-      else layer=0;
-    }
-    voxelLayers[i]=layer;
+    voxelLayers[i]=Math.max(0,Math.min(layerCount-1,d));
   }
 
-  updateLayerButtons();
-  showLayer('all');
-  const counts=new Array(layerCount).fill(0);
-  for(const d of voxelLayers)counts[d]++;
-  $('#status').textContent='Jagged nested layers · D0 exterior locked · D0/D1 boundary visibly stepped.';
+  updateLayerButtons();showLayer('all');
+  const counts=new Array(layerCount).fill(0);for(const d of voxelLayers)counts[d]++;
+  $('#status').textContent='INNER JAGGED: '+counts.map((n,i)=>'D'+i+'='+n).join(' · ');
 }
 function autoSeparateLayers(){
   if(!voxelMesh||!voxelPositions.length)return;
